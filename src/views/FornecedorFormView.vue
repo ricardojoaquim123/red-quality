@@ -29,14 +29,14 @@
             <label for="grupo">Grupo de Fornecedor</label>
             <select id="grupo" v-model="form.grupo_fornecedor_id" required>
               <option value="" disabled>Selecione o Grupo</option>
-              <option v-for="grupo in grupos" :key="grupo.id" :value="grupo.id">{{ grupo.nome }}</option>
+              <option v-for="grupo in grupos" :key="grupo.id" :value="grupo.id">{{ grupo.descricao }}</option>
             </select>
           </div>
           <div class="form-group">
             <label for="escopo">Escopo de Fornecimento</label>
             <input type="text" id="escopo" v-model="form.escopo_fornecimento">
           </div>
-          </div>
+        </div>
       </section>
       
       <section class="section-group">
@@ -57,7 +57,7 @@
         <button type="submit" :disabled="loadingSave" class="btn-submit">
           {{ loadingSave ? 'Salvando...' : (isEditing ? 'Salvar Alterações' : 'Criar Fornecedor') }}
         </button>
-        </div>
+      </div>
       <p v-if="saveError" class="error-message">{{ saveError }}</p>
     </form>
   </div>
@@ -129,7 +129,6 @@ async function fetchMateriaisFornecidos() {
             .eq('fornecedor_id', fornecedorId)
 
         if (error) throw error
-        // Mapeia para um array simples de IDs
         materiaisSelecionados.value = data.map(item => item.materia_prima_id)
 
     } catch (error) {
@@ -147,9 +146,10 @@ async function fetchFormData() {
 
     try {
         // 1. Carregar Grupos
+        // MUDANÇA CRÍTICA: Busca 'descricao' no lugar de 'nome'
         const { data: gruposData, error: gruposError } = await supabase
             .from('grupos_fornecedor')
-            .select('id, nome')
+            .select('id, descricao') // <--- AQUI ESTÁ A CORREÇÃO DE SCHEMA
             
         if (gruposError) throw gruposError
         grupos.value = gruposData
@@ -180,6 +180,7 @@ async function fetchFormData() {
  * Salva o registro na tabela fornecedores e gerencia a tabela pivô.
  */
 async function handleSave() {
+    // ... (a lógica de salvamento permanece a mesma) ...
     loadingSave.value = true
     saveError.value = null
 
@@ -226,6 +227,7 @@ async function handleSave() {
  * Sincroniza a lista de materiais fornecidos pelo fornecedor.
  */
 async function syncMateriais(id) {
+    // ... (a lógica de sync permanece a mesma) ...
     // 1. Obter a lista atual de materiais no banco
     const { data: materiaisAtuais, error: fetchError } = await supabase
         .from('fornecedor_materiais')
@@ -269,9 +271,9 @@ async function syncMateriais(id) {
 
 // --- CICLO DE VIDA ---
 onMounted(async () => {
-    await fetchFormData()
+    // Ordem das chamadas
+    await fetchFormData() 
     await fetchMateriais()
-    // Carregar materiais fornecidos deve ser feito APÓS carregar os dados do fornecedor
     await fetchMateriaisFornecidos() 
 
     // Se houver erro de carregamento (ex: RLS), ele será exibido
@@ -284,132 +286,28 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.fornecedor-form-view {
-    max-width: 1200px;
-    margin: 2rem auto;
-    font-family: Arial, sans-serif;
-}
-.page-header {
-    display: flex;
-    align-items: center;
-    margin-bottom: 2rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid #c50d42;
-}
-.page-header h1 {
-    margin-left: 20px;
-}
-.btn-voltar {
-    background: #f4f4f4;
-    color: #333;
-    padding: 8px 15px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    cursor: pointer;
-}
-.card {
-    background-color: #fff;
-    border: 1px solid #eee;
-    border-radius: 8px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-}
-.loading-state, .empty-state, .error-message {
-    text-align: center;
-    padding: 1rem 0;
-    color: #888;
-}
-.error-message {
-    color: #dc3545;
-    font-weight: bold;
-}
-
-/* Estrutura do Formulário */
-.section-group {
-    margin-bottom: 30px;
-    padding-bottom: 20px;
-    border-bottom: 1px dashed #ddd;
-}
-.section-group h2 {
-    color: #007bff;
-    margin-top: 0;
-    margin-bottom: 15px;
-}
-.instrucao {
-    font-style: italic;
-    color: #666;
-    margin-bottom: 15px;
-}
-
-.form-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 20px;
-}
-.form-group {
-    display: flex;
-    flex-direction: column;
-}
-.form-group label {
-    font-weight: 600;
-    margin-bottom: 5px;
-    color: #333;
-}
-.form-group input, .form-group select {
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-}
-
-/* Materiais Checkboxes */
-.material-checkboxes {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-}
-.checkbox-item {
-    display: flex;
-    align-items: center;
-    background-color: #f7f7f7;
-    padding: 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-.checkbox-item:hover {
-    background-color: #eee;
-}
-.checkbox-item input[type="checkbox"] {
-    margin-right: 10px;
-    transform: scale(1.2);
-}
-.checkbox-item label {
-    font-weight: normal;
-    cursor: pointer;
-}
-
-/* Botões de Ação */
-.form-actions {
-    margin-top: 20px;
-    display: flex;
-    justify-content: flex-end;
-    gap: 15px;
-}
-.btn-submit {
-    background-color: #c50d42;
-    color: white;
-    padding: 12px 25px;
-    border: none;
-    border-radius: 4px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-.btn-submit:hover:not(:disabled) {
-    background-color: #a30b37;
-}
-.btn-submit:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
-}
+/* Estilos (Mesmos da última vez) */
+.fornecedor-form-view { max-width: 1200px; margin: 2rem auto; font-family: Arial, sans-serif; }
+.page-header { display: flex; align-items: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #c50d42; }
+.page-header h1 { margin-left: 20px; }
+.btn-voltar { background: #f4f4f4; color: #333; padding: 8px 15px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
+.card { background-color: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+.loading-state, .empty-state, .error-message { text-align: center; padding: 1rem 0; color: #888; }
+.error-message { color: #dc3545; font-weight: bold; }
+.section-group { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px dashed #ddd; }
+.section-group h2 { color: #007bff; margin-top: 0; margin-bottom: 15px; }
+.instrucao { font-style: italic; color: #666; margin-bottom: 15px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.form-group { display: flex; flex-direction: column; }
+.form-group label { font-weight: 600; margin-bottom: 5px; color: #333; }
+.form-group input, .form-group select { padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+.material-checkboxes { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+.checkbox-item { display: flex; align-items: center; background-color: #f7f7f7; padding: 10px; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; }
+.checkbox-item:hover { background-color: #eee; }
+.checkbox-item input[type="checkbox"] { margin-right: 10px; transform: scale(1.2); }
+.checkbox-item label { font-weight: normal; cursor: pointer; }
+.form-actions { margin-top: 20px; display: flex; justify-content: flex-end; gap: 15px; }
+.btn-submit { background-color: #c50d42; color: white; padding: 12px 25px; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
+.btn-submit:hover:not(:disabled) { background-color: #a30b37; }
+.btn-submit:disabled { background-color: #ccc; cursor: not-allowed; }
 </style>
