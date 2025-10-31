@@ -11,6 +11,16 @@
       <section class="card form-section">
         <h2>{{ isEditing ? 'Editar Material' : 'Cadastrar Novo Material' }}</h2>
         <form @submit.prevent="handleMaterialSubmit">
+          
+          <div class="form-group">
+            <label for="categoria">Categoria (Obrigatório)</label>
+            <select id="categoria" v-model="materialForm.categoria_id" required :disabled="loadingMaterial || loadingCategorias">
+              <option :value="null" disabled>Selecione a Categoria</option>
+              <option v-for="cat in categorias" :key="cat.id" :value="cat.id">{{ cat.nome }}</option>
+            </select>
+            <small v-if="loadingCategorias">Carregando categorias...</small>
+          </div>
+
           <div class="form-group">
             <label for="nome">Nome do Material/Serviço</label>
             <input type="text" id="nome" v-model="materialForm.nome" required :disabled="loadingMaterial">
@@ -20,7 +30,7 @@
             <input type="text" id="codigo" v-model="materialForm.codigo_interno" :disabled="loadingMaterial">
           </div>
           <div class="form-group">
-            <label for="classificacao">Classificação</label>
+            <label for="classificacao">Classificação (Produtivo/Serviço...)</label>
             <select id="classificacao" v-model="materialForm.classificacao" required :disabled="loadingMaterial">
               <option value="" disabled>Selecione a Classificação</option>
               <option value="Produtivo">Produtivo</option>
@@ -56,23 +66,23 @@
           </div>
         </div>
 
-        <p v-if="loadingList" class="loading-state">Carregando lista...</p>
+        <p v-if="loadingList || loadingCategorias" class="loading-state">Carregando lista...</p>
         <p v-else-if="listError" class="error-message">{{ listError }}</p>
         
         <div v-else>
           <div 
             v-for="grupo in materiaisAgrupados" 
-            :key="grupo.classificacao" 
+            :key="grupo.categoriaId" 
             class="material-group"
           >
             <h3 class="classificacao-header">
-              {{ grupo.classificacao }}
+              {{ grupo.categoriaNome }}
               <span class="count">({{ grupo.materiais.length }})</span>
             </h3>
             
             <ul class="material-list">
               <li v-if="grupo.materiais.length === 0" class="material-item-empty">
-                Nenhum material encontrado para esta classificação.
+                Nenhum material encontrado.
               </li>
               
               <li v-for="material in grupo.materiais" :key="material.id" class="material-item">
@@ -136,10 +146,10 @@
 </template>
 
 <script setup>
-// O SCRIPT SETUP INTEIRO PERMANECE IDÊNTICO AO ANTERIOR
 import { ref, onMounted, computed } from 'vue'
 import { supabase } from '@/supabase'
 
+// --- ESTADO GERAL ---
 const materiais = ref([])
 const tiposDocumento = ref([]) 
 const loadingList = ref(true)
@@ -148,9 +158,21 @@ const listError = ref(null)
 const materialError = ref(null)
 const filtroBusca = ref('')
 
-const materialForm = ref({ id: null, nome: '', codigo_interno: '', classificacao: '' })
+// NOVO ESTADO: Categorias
+const categorias = ref([])
+const loadingCategorias = ref(true)
+
+// --- ESTADO FORMULÁRIO DE MATERIAL (ATUALIZADO) ---
+const materialForm = ref({ 
+  id: null, 
+  nome: '', 
+  codigo_interno: '', 
+  classificacao: '', 
+  categoria_id: null // <-- ADICIONADO
+})
 const isEditing = computed(() => !!materialForm.value.id)
 
+// --- ESTADO MODAL DE REQUISITOS (Sem mudança) ---
 const modalRequisitosAberto = ref(false)
 const materialSelecionado = ref(null)
 const requisitosAtuais = ref([]) 
@@ -159,6 +181,7 @@ const loadingRequisitos = ref(true)
 const loadingTipos = ref(true)
 const requisitosError = ref(null)
 
+// --- COMPUTED PROPS ---
 const requisitosMap = ref({})
 const getReqCount = (materialId) => requisitosMap.value[materialId] || 0
 
@@ -171,40 +194,45 @@ const getDocumentoNome = (tipoId) => {
     return tipo ? tipo.nome_documento : 'Documento Desconhecido'
 }
 
+// COMPUTED ATUALIZADA: Agrupa pela nova Categoria
 const materiaisAgrupados = computed(() => {
   const termo = filtroBusca.value.toLowerCase().trim()
   
+  // 1. Filtra a lista
   const materiaisFiltrados = materiais.value.filter(material => {
     if (!termo) return true 
-    
     const nomeMatch = material.nome.toLowerCase().includes(termo)
     const codigoMatch = material.codigo_interno ? material.codigo_interno.toLowerCase().includes(termo) : false
-    
     return nomeMatch || codigoMatch
   })
 
-  const grupos = {
-    'Produtivo': [],
-    'Improdutivo': [],
-    'Serviço': [],
-    'Outros': [] 
-  }
+  // 2. Cria um Map de categorias para agrupar (ID -> Nome)
+  const categoriaMap = new Map()
+  categorias.value.forEach(cat => {
+    categoriaMap.set(cat.id, { categoriaNome: cat.nome, materiais: [] })
+  })
+  // Adiciona um grupo "Sem Categoria"
+  const semCategoriaId = 'sem-categoria'
+  categoriaMap.set(semCategoriaId, { categoriaNome: 'Sem Categoria', materiais: [] })
 
+  // 3. Agrupa os materiais filtrados
   materiaisFiltrados.forEach(material => {
-    if (grupos[material.classificacao]) {
-      grupos[material.classificacao].push(material)
+    const idCategoria = material.categoria_id
+    if (categoriaMap.has(idCategoria)) {
+      categoriaMap.get(idCategoria).materiais.push(material)
     } else {
-      grupos['Outros'].push(material) 
+      categoriaMap.get(semCategoriaId).materiais.push(material) // Se a categoria for nula ou não encontrada
     }
   })
 
-  return [
-    { classificacao: 'Produtivo', materiais: grupos['Produtivo'] },
-    { classificacao: 'Improdutivo', materiais: grupos['Improdutivo'] },
-    { classificacao: 'Serviço', materiais: grupos['Serviço'] },
-    { classificacao: 'Outros', materiais: grupos['Outros'] }
-  ].filter(g => g.materiais.length > 0 || !termo) 
+  // 4. Formata para o v-for do template
+  // Filtra grupos que não têm itens (a menos que o filtro esteja limpo)
+  return Array.from(categoriaMap.values())
+              .filter(g => g.materiais.length > 0 || !termo) 
 })
+
+
+// --- FUNÇÕES DE CARREGAMENTO ---
 
 async function fetchMateriais() {
   loadingList.value = true
@@ -212,7 +240,7 @@ async function fetchMateriais() {
   try {
     const { data, error } = await supabase
       .from('materias_primas')
-      .select('*')
+      .select('*') // Puxa tudo, incluindo a nova 'categoria_id'
       .order('nome', { ascending: true })
 
     if (error) throw error
@@ -261,13 +289,36 @@ async function fetchRequisitosECount() {
     }
 }
 
+// NOVA FUNÇÃO: Buscar as categorias para o dropdown
+async function fetchCategorias() {
+  loadingCategorias.value = true
+  try {
+    const { data, error } = await supabase.from('categorias_materiais').select('id, nome').order('nome')
+    if (error) throw error
+    categorias.value = data
+  } catch (err) { 
+    console.error('Erro ao buscar categorias:', err.message)
+    materialError.value = 'Falha ao carregar categorias. ' + err.message
+  }
+  finally { loadingCategorias.value = false }
+}
+
+
+// --- FUNÇÕES DE CRUD DO MATERIAL (ATUALIZADAS) ---
+
 function resetForm() {
-    materialForm.value = { id: null, nome: '', codigo_interno: '', classificacao: '' }
+    materialForm.value = { 
+      id: null, 
+      nome: '', 
+      codigo_interno: '', 
+      classificacao: '', 
+      categoria_id: null // <-- ADICIONADO
+    }
     materialError.value = null
 }
 
 function handleEdit(material) {
-    materialForm.value = { ...material }
+    materialForm.value = { ...material } // O spread operator já inclui a 'categoria_id'
     materialError.value = null
 }
 
@@ -277,10 +328,12 @@ async function handleMaterialSubmit() {
     const isUpdate = isEditing.value
 
     try {
+        // ATUALIZADO: Payload inclui 'categoria_id'
         const payload = { 
             nome: materialForm.value.nome,
             codigo_interno: materialForm.value.codigo_interno,
-            classificacao: materialForm.value.classificacao
+            classificacao: materialForm.value.classificacao,
+            categoria_id: materialForm.value.categoria_id // <-- ADICIONADO
         }
 
         if (isUpdate) {
@@ -316,10 +369,8 @@ async function handleDeleteMaterial(material) {
   if (!confirm(`TEM CERTEZA que deseja excluir o material "${material.nome}"?\n\nEsta ação é irreversível e removerá TODOS os requisitos e associações deste material com fornecedores.`)) {
     return;
   }
-
   loadingMaterial.value = true;
   materialError.value = null;
-
   try {
     const { error: reqError } = await supabase
       .from('requisitos_material')
@@ -347,7 +398,6 @@ async function handleDeleteMaterial(material) {
     if (isEditing.value && materialForm.value.id === material.id) {
       resetForm();
     }
-
   } catch (error) {
     console.error('Erro ao excluir material:', error);
     materialError.value = `Erro ao excluir: ${error.message}`;
@@ -356,20 +406,22 @@ async function handleDeleteMaterial(material) {
   }
 }
 
+
+// --- FUNÇÕES DE GESTÃO DE REQUISITOS (Modal) (Sem mudanças) ---
+// (Funções fetchRequisitosAtuais, openRequisitosModal, closeRequisitosModal, 
+// handleAddRequisito, handleDeleteRequisito permanecem idênticas)
+
 async function fetchRequisitosAtuais() {
     if (!materialSelecionado.value) return
     loadingRequisitos.value = true
     requisitosError.value = null
-
     try {
         const { data, error } = await supabase
             .from('requisitos_material')
             .select('*')
             .eq('materia_prima_id', materialSelecionado.value.id)
-            
         if (error) throw error
         requisitosAtuais.value = data
-
     } catch (error) {
         console.error('Erro ao carregar requisitos atuais:', error)
         requisitosError.value = 'Falha ao carregar requisitos.'
@@ -377,24 +429,20 @@ async function fetchRequisitosAtuais() {
         loadingRequisitos.value = false
     }
 }
-
 function openRequisitosModal(material) {
     materialSelecionado.value = material
     tipoDocumentoSelecionado.value = ''
     fetchRequisitosAtuais()
     modalRequisitosAberto.value = true
 }
-
 function closeRequisitosModal() {
     modalRequisitosAberto.value = false
     materialSelecionado.value = null
     requisitosAtuais.value = []
     fetchRequisitosECount() 
 }
-
 async function handleAddRequisito() {
     if (!materialSelecionado.value || !tipoDocumentoSelecionado.value) return
-
     try {
         const { error } = await supabase
             .from('requisitos_material')
@@ -402,38 +450,33 @@ async function handleAddRequisito() {
                 materia_prima_id: materialSelecionado.value.id,
                 tipo_documento_id: tipoDocumentoSelecionado.value,
             })
-
         if (error) throw error
-        
         tipoDocumentoSelecionado.value = ''
         await fetchRequisitosAtuais() 
-        
     } catch (error) {
         console.error('Erro ao adicionar requisito:', error)
         requisitosError.value = `Erro ao adicionar: ${error.message}. (Documento já pode ser um requisito)`
     }
 }
-
 async function handleDeleteRequisito(requisitoId) {
     if (!confirm('Confirmar a remoção deste requisito de documentação?')) return
-
     try {
         const { error } = await supabase
             .from('requisitos_material')
             .delete()
             .eq('id', requisitoId)
-        
         if (error) throw error
-        
         await fetchRequisitosAtuais() 
-
     } catch (error) {
         console.error('Erro ao deletar requisito:', error)
         requisitosError.value = `Erro ao remover requisito: ${error.message}`
     }
 }
 
+
+// --- CICLO DE VIDA (ATUALIZADO) ---
 onMounted(() => {
+    fetchCategorias() // <- Adicionado
     fetchMateriais()
     fetchTiposDocumento()
     fetchRequisitosECount()
@@ -441,10 +484,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* ========================================= */
-/* ARQUITETURA DE LAYOUT ATUALIZADA          */
-/* ========================================= */
-
+/* ESTILOS ATUALIZADOS */
 .admin-materiais-view { max-width: 1400px; margin: 2rem auto; font-family: Arial, sans-serif; }
 
 /* CABEÇALHO PADRÃO DE PÁGINA PRINCIPAL */
@@ -467,17 +507,18 @@ onMounted(() => {
 
 .card { background-color: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
 
-/* Seção de Cadastro (sem mudança) */
+/* Seção de Cadastro */
 .form-group { display: flex; flex-direction: column; margin-bottom: 15px; }
 .form-group label { font-weight: 600; margin-bottom: 5px; color: #333; }
 .form-group input, .form-group select { padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+.form-group small { font-size: 0.8rem; color: #007bff; margin-top: 0.25rem; }
 .form-actions { display: flex; gap: 10px; }
 .btn-submit { background-color: #c50d42; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; }
 .btn-submit:hover:not(:disabled) { background-color: #a30b37; }
 .btn-cancel { background-color: #6c757d; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }
 .error-message { color: #dc3545; margin-top: 10px; font-weight: bold; }
 
-/* --- SEÇÃO DA LISTA ATUALIZADA --- */
+/* --- SEÇÃO DA LISTA ATUALIZADA (Agrupada por Categoria) --- */
 .list-header {
   display: flex;
   justify-content: space-between;
@@ -525,11 +566,9 @@ onMounted(() => {
   list-style: none; 
   padding: 0; 
 }
-
-/* MELHORIA DE LAYOUT: Item da Lista */
 .material-item { 
   display: flex; 
-  gap: 1rem; /* Alterado de space-between para gap */
+  gap: 1rem;
   align-items: center; 
   padding: 10px 0; 
   border-bottom: 1px dotted #eee; 
@@ -540,12 +579,12 @@ onMounted(() => {
   padding: 10px 0;
 }
 .material-info { 
-  flex-grow: 1; /* Faz o nome ocupar o espaço disponível */
+  flex-grow: 1; 
   flex-shrink: 1;
-  min-width: 0; /* Permite que o texto quebre */
+  min-width: 0; 
 }
 .material-info strong {
-  word-break: break-word; /* Quebra nomes longos */
+  word-break: break-word; 
 }
 .material-info small { 
   display: block; 
@@ -554,8 +593,8 @@ onMounted(() => {
 .material-actions { 
   display: flex; 
   gap: 8px; 
-  flex-shrink: 0; /* Impede que os botões sejam "espremidos" */
-  justify-content: flex-end; /* Alinha os botões à direita */
+  flex-shrink: 0; 
+  justify-content: flex-end; 
 }
 .btn-action { 
   padding: 6px 12px; 
@@ -563,36 +602,29 @@ onMounted(() => {
   cursor: pointer; 
   font-size: 0.9em; 
   border: 1px solid transparent; 
-  white-space: nowrap; /* Impede que o texto do botão quebre */
+  white-space: nowrap; 
 }
-/* FIM DA MELHORIA DE LAYOUT */
-
 .btn-edit { background-color: #ffc107; color: #333; }
 .btn-requisitos { background-color: #007bff; color: white; }
 .btn-delete { background-color: #dc3545; color: white; }
-/* --- FIM DOS ESTILOS DA LISTA --- */
 
 /* --- RESPONSIVIDADE --- */
 @media (max-width: 900px) { 
   .admin-grid { grid-template-columns: 1fr; } 
   .list-section { order: -1; } 
 }
-
 @media (max-width: 768px) {
-    /* Faz a lista empilhar em telas pequenas */
     .material-item {
-        flex-direction: column; /* Empilha o info e os botões */
-        align-items: flex-start; /* Alinha tudo à esquerda */
+        flex-direction: column; 
+        align-items: flex-start; 
     }
     .material-actions {
-        flex-wrap: wrap; /* Permite que os botões quebrem a linha */
-        justify-content: flex-start; /* Alinha à esquerda */
-        width: 100%; /* Ocupa todo o espaço */
-        margin-top: 0.5rem; /* Adiciona espaço quando empilhado */
+        flex-wrap: wrap; 
+        justify-content: flex-start; 
+        width: 100%; 
+        margin-top: 0.5rem; 
     }
 }
-/* --- FIM DA RESPONSIVIDADE --- */
-
 
 /* Modal (sem mudança) */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
