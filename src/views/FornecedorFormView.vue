@@ -11,7 +11,7 @@
       </div>
     </header>
 
-    <p v-if="loadingForm || loadingMateriais" class="loading-state">Carregando dados...</p>
+    <p v-if="loadingForm || loadingMateriais || loadingCategorias" class="loading-state">Carregando dados...</p>
     <p v-else-if="fetchError" class="error-message card">{{ fetchError }}</p>
 
     <form v-else @submit.prevent="handleSave" class="card form-container">
@@ -74,11 +74,11 @@
         <div v-else class="material-grouped-list">
           <div 
             v-for="grupo in materiaisAgrupados" 
-            :key="grupo.classificacao" 
+            :key="grupo.categoriaId" 
             class="material-group"
           >
             <h3 class="classificacao-header">
-              {{ grupo.classificacao }}
+              {{ grupo.categoriaNome }}
               <span class="count">({{ grupo.materiais.length }})</span>
             </h3>
 
@@ -129,9 +129,11 @@ const form = ref({
 const grupos = ref([]) 
 const materiais = ref([]) 
 const materiaisSelecionados = ref([]) 
-
-// NOVO ESTADO: Filtro de Busca
 const filtroBusca = ref('')
+
+// NOVO ESTADO: Categorias
+const categorias = ref([])
+const loadingCategorias = ref(true)
 
 const loadingForm = ref(true)
 const loadingMateriais = ref(true)
@@ -143,54 +145,51 @@ const isEditing = computed(() => !!fornecedorId)
 
 // --- COMPUTED PROPS ---
 
-// NOVA COMPUTED: Filtra e Agrupa a lista de materiais
+// COMPUTED ATUALIZADA: Agrupa pela nova Categoria
 const materiaisAgrupados = computed(() => {
   const termo = filtroBusca.value.toLowerCase().trim()
   
-  // 1. Filtra a lista primeiro
+  // 1. Filtra a lista
   const materiaisFiltrados = materiais.value.filter(material => {
-    if (!termo) return true // Se o filtro estiver vazio, mostra todos
-    
+    if (!termo) return true 
     const nomeMatch = material.nome.toLowerCase().includes(termo)
     const codigoMatch = material.codigo_interno ? material.codigo_interno.toLowerCase().includes(termo) : false
-    
     return nomeMatch || codigoMatch
   })
 
-  // 2. Agrupa os materiais filtrados
-  const grupos = {
-    'Produtivo': [],
-    'Improdutivo': [],
-    'Serviço': [],
-    'Outros': [] // Grupo de fallback
-  }
+  // 2. Cria um Map de categorias para agrupar (ID -> Nome)
+  const categoriaMap = new Map()
+  categorias.value.forEach(cat => {
+    categoriaMap.set(cat.id, { categoriaId: cat.id, categoriaNome: cat.nome, materiais: [] })
+  })
+  const semCategoriaId = 'sem-categoria'
+  categoriaMap.set(semCategoriaId, { categoriaId: semCategoriaId, categoriaNome: 'Sem Categoria', materiais: [] })
 
+  // 3. Agrupa os materiais filtrados
   materiaisFiltrados.forEach(material => {
-    if (grupos[material.classificacao]) {
-      grupos[material.classificacao].push(material)
+    const idCategoria = material.categoria_id
+    if (categoriaMap.has(idCategoria)) {
+      categoriaMap.get(idCategoria).materiais.push(material)
     } else {
-      grupos['Outros'].push(material) // Se a classificação for nula ou inesperada
+      categoriaMap.get(semCategoriaId).materiais.push(material) // Se a categoria for nula ou não encontrada
     }
   })
 
-  // 3. Formata para o v-for do template
-  return [
-    { classificacao: 'Produtivo', materiais: grupos['Produtivo'] },
-    { classificacao: 'Improdutivo', materiais: grupos['Improdutivo'] },
-    { classificacao: 'Serviço', materiais: grupos['Serviço'] },
-    { classificacao: 'Outros', materiais: grupos['Outros'] }
-  ].filter(g => g.materiais.length > 0 || !termo) // Só mostra o grupo se ele tiver itens OU se o filtro estiver vazio
+  // 4. Formata para o v-for do template
+  return Array.from(categoriaMap.values())
+              .filter(g => g.materiais.length > 0 || !termo) 
 })
 
 
-// --- FUNÇÕES DE CARREGAMENTO (Sem mudanças) ---
+// --- FUNÇÕES DE CARREGAMENTO ---
 
+// ATUALIZADO: Busca 'categoria_id'
 async function fetchMateriais() {
     loadingMateriais.value = true
     try {
         const { data, error } = await supabase
             .from('materias_primas')
-            .select('id, nome, classificacao, codigo_interno') // Adicionado codigo_interno para o filtro
+            .select('id, nome, classificacao, codigo_interno, categoria_id') // <-- ATUALIZADO
             .order('nome', { ascending: true })
         
         if (error) throw error
@@ -202,6 +201,20 @@ async function fetchMateriais() {
     } finally {
         loadingMateriais.value = false
     }
+}
+
+// NOVA FUNÇÃO: Busca as categorias
+async function fetchCategorias() {
+  loadingCategorias.value = true
+  try {
+    const { data, error } = await supabase.from('categorias_materiais').select('id, nome').order('nome')
+    if (error) throw error
+    categorias.value = data
+  } catch (err) { 
+    console.error('Erro ao buscar categorias:', err.message)
+    fetchError.value = 'Falha ao carregar categorias. ' + err.message
+  }
+  finally { loadingCategorias.value = false }
 }
 
 async function fetchMateriaisFornecidos() {
@@ -226,6 +239,7 @@ async function fetchFormData() {
     fetchError.value = null
 
     try {
+        // Busca Grupos
         const { data: gruposData, error: gruposError } = await supabase
             .from('grupos_fornecedor')
             .select('id, nome_grupo')
@@ -233,6 +247,7 @@ async function fetchFormData() {
         if (gruposError) throw gruposError
         grupos.value = gruposData
 
+        // Busca dados de Edição
         if (isEditing.value) {
             const { data: fornecedorData, error: fornError } = await supabase
                 .from('fornecedores')
@@ -349,10 +364,16 @@ async function syncMateriais(id) {
     }
 }
 
-// --- CICLO DE VIDA (Sem mudanças) ---
+// --- CICLO DE VIDA (ATUALIZADO) ---
 onMounted(async () => {
-    await fetchFormData() 
-    await fetchMateriais()
+    // Carrega dados em paralelo para otimização
+    await Promise.all([
+      fetchFormData(),
+      fetchMateriais(),
+      fetchCategorias() // <-- ADICIONADO
+    ])
+    
+    // Busca materiais selecionados apenas se estiver editando
     if (isEditing.value) {
         await fetchMateriaisFornecidos()
     } 
@@ -408,7 +429,7 @@ onMounted(async () => {
 .form-group label { font-weight: 600; margin-bottom: 5px; color: #333; }
 .form-group input, .form-group select { padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
 
-/* --- NOVOS ESTILOS PARA FILTRO E GRUPOS --- */
+/* --- ESTILOS ATUALIZADOS PARA FILTRO E GRUPOS DE CATEGORIA --- */
 .form-group-filter {
   margin-bottom: 1rem;
 }
@@ -433,6 +454,7 @@ onMounted(async () => {
 .material-group {
   margin-bottom: 1.5rem;
 }
+/* O nome do header agora é 'categoria-header' para clareza */
 .classificacao-header {
   color: #007bff;
   margin: 0 0 0.5rem 0;
@@ -455,7 +477,7 @@ onMounted(async () => {
 /* Estilos de Checkbox (sem mudança) */
 .material-checkboxes { 
   display: grid; 
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Aumentei o minmax */
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 15px; 
 }
 .checkbox-item { 
