@@ -1,338 +1,415 @@
-<script setup>
-import { ref, onMounted } from 'vue'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { supabase } from '@/supabase'
-
-// --- Inicialização ---
-const route = useRoute()
-const router = useRouter()
-const fornecedorId = route.params.id
-const isEditing = ref(!!fornecedorId)
-
-// --- Variáveis de Estado ---
-const formData = ref({
-  nome: '',
-  cnpj_id_fiscal: '',
-  contato_nome: '',
-  contato_email: '',
-  contato_telefone: '',
-  endereco: '',
-  escopo_fornecimento: '',
-  tipo_material: 'Produtivo',
-  categoria_risco: 'Baixo',
-  status_homologacao: 'Em Avaliação',
-  data_homologacao: null,
-  data_ultima_avaliacao: null,
-  grupo_fornecedor_id: null,
-})
-const loading = ref(false)
-const pageTitle = ref('Cadastrar Novo Fornecedor')
-const listaDeGrupos = ref([])
-
-// --- NOVA VARIÁVEL DE ESTADO PARA O ERRO ---
-const errorMsg = ref(null)
-
-// --- Funções ---
-
-async function fetchGrupos() {
-  try {
-    const { data, error } = await supabase.from('grupos_fornecedor').select('id, nome_grupo')
-    if (error) throw error
-    listaDeGrupos.value = data
-  } catch (err) {
-    console.error('Erro ao buscar grupos:', err.message)
-  }
-}
-
-async function fetchFornecedorData() {
-  if (!isEditing.value) {
-    fetchGrupos()
-    return
-  }
-
-  pageTitle.value = 'Editar Fornecedor'
-  loading.value = true
-  try {
-    const [fornecedorRes, gruposRes] = await Promise.all([
-      supabase.from('fornecedores').select('*').eq('id', fornecedorId).single(),
-      supabase.from('grupos_fornecedor').select('id, nome_grupo')
-    ])
-    
-    if (fornecedorRes.error) throw fornecedorRes.error
-    if (gruposRes.error) throw gruposRes.error
-    
-    formData.value = fornecedorRes.data
-    listaDeGrupos.value = gruposRes.data
-
-  } catch (error) {
-    console.error('Erro ao buscar dados para edição:', error.message)
-    // --- MUDANÇA AQUI ---
-    // Usando a nova variável de erro em vez de alert
-    errorMsg.value = 'Não foi possível carregar os dados do fornecedor.'
-  } finally {
-    loading.value = false
-  }
-}
-
-// 2. Função "Salvar" (Inteligente) - (Permanece a mesma)
-async function handleSubmit() {
-  loading.value = true
-  // --- MUDANÇA AQUI ---
-  // Limpa erros antigos antes de tentar salvar
-  errorMsg.value = null
-  
-  if (formData.value.grupo_fornecedor_id === '') {
-    formData.value.grupo_fornecedor_id = null
-  }
-  
-  try {
-    let error;
-    if (isEditing.value) {
-      // MODO EDIÇÃO (UPDATE)
-      const { error: updateError } = await supabase
-        .from('fornecedores')
-        .update(formData.value)
-        .eq('id', fornecedorId)
-      error = updateError
-    } else {
-      // MODO CADASTRO (INSERT)
-      const { error: insertError } = await supabase
-        .from('fornecedores')
-        .insert([formData.value])
-      error = insertError
-    }
-    if (error) throw error
-    
-    alert(`Fornecedor ${isEditing.value ? 'atualizado' : 'cadastrado'} com sucesso!`)
-    router.push('/fornecedores')
-
-  } catch (error) {
-    console.error('Erro ao salvar:', error.message)
-    
-    // --- MUDANÇA PRINCIPAL AQUI (LÓGICA DE ERRO) ---
-    // Removemos o alert() e adicionamos uma lógica inteligente
-    if (error.message && error.message.includes('fornecedores_cnpj_id_fiscal_key')) {
-      errorMsg.value = 'Erro: Este CNPJ/ID Fiscal já está cadastrado no sistema.'
-    } else {
-      errorMsg.value = `Ocorreu um erro inesperado ao salvar: ${error.message}`
-    }
-
-  } finally {
-    loading.value = false
-  }
-}
-
-// 3. 'onMounted' (Roda quando a página carrega)
-onMounted(() => {
-  fetchFornecedorData()
-})
-</script>
-
 <template>
-  <div>
-    <h2>{{ pageTitle }}</h2>
+  <div class="fornecedor-form-view">
+    <header class="page-header">
+      <button @click="router.push({ name: 'fornecedores-lista' })" class="btn-voltar">← Voltar para Lista</button>
+      <h1>{{ isEditing ? 'Editar Fornecedor' : 'Novo Fornecedor' }}</h1>
+    </header>
 
-    <section class="form-section">
-      <div v-if="!loading && errorMsg && !isEditing" class="error-message">
-        {{ errorMsg }}
-      </div>
+    <p v-if="loadingForm || loadingMateriais" class="loading-state">Carregando dados...</p>
+    <p v-else-if="fetchError" class="error-message card">{{ fetchError }}</p>
+
+    <form v-else @submit.prevent="handleSave" class="card form-container">
       
-      <div v-if="loading && isEditing" class="loading">
-        Carregando dados...
-      </div>
+      <section class="section-group">
+        <h2>Dados Fundamentais</h2>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="nome">Nome/Razão Social</label>
+            <input type="text" id="nome" v-model="form.nome" required>
+          </div>
+          <div class="form-group">
+            <label for="cnpj">CNPJ/ID Fiscal</label>
+            <input type="text" id="cnpj" v-model="form.cnpj">
+          </div>
+          <div class="form-group">
+            <label for="contato">Contato Principal</label>
+            <input type="text" id="contato" v-model="form.contato">
+          </div>
+          <div class="form-group">
+            <label for="grupo">Grupo de Fornecedor</label>
+            <select id="grupo" v-model="form.grupo_fornecedor_id" required>
+              <option value="" disabled>Selecione o Grupo</option>
+              <option v-for="grupo in grupos" :key="grupo.id" :value="grupo.id">{{ grupo.nome }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="escopo">Escopo de Fornecimento</label>
+            <input type="text" id="escopo" v-model="form.escopo_fornecimento">
+          </div>
+          </div>
+      </section>
       
-      <form v-else @submit.prevent="handleSubmit" class="cadastro-form">
+      <section class="section-group">
+        <h2>Materiais/Serviços Fornecidos</h2>
+        <p class="instrucao">Selecione todos os materiais ou serviços que este fornecedor pode fornecer. Isso definirá os requisitos de documentação específicos.</p>
         
-        <div class="input-group">
-          <label for="nome">Nome</label>
-          <input type="text" id="nome" v-model="formData.nome" required>
-        </div>
-        
-        <div class="input-group">
-          <label for="cnpj">CNPJ / ID Fiscal</label>
-          <input type="text" id="cnpj" v-model="formData.cnpj_id_fiscal" required>
-        </div>
-        
-        <div class="input-group">
-          <label for="escopo">Escopo de Fornecimento</label>
-          <input type="text" id="escopo" v-model="formData.escopo_fornecimento">
-        </div>
+        <p v-if="materiais.length === 0" class="empty-state">Nenhum material cadastrado. Cadastre em "Gerenciar Materiais" primeiro.</p>
 
-        <div class="input-group-split">
-          <div class="input-group">
-            <label for="tipo_material">Tipo de Material</label>
-            <select id="tipo_material" v-model="formData.tipo_material">
-              <option>Produtivo</option>
-              <option>Improdutivo</option>
-            </select>
-          </div>
-          <div class="input-group">
-            <label for="categoria_risco">Categoria de Risco</label>
-            <select id="categoria_risco" v-model="formData.categoria_risco">
-              <option>Baixo</option>
-              <option>Médio</option>
-              <option>Alto</option>
-            </select>
-          </div>
+        <div v-else class="material-checkboxes">
+            <div v-for="material in materiais" :key="material.id" class="checkbox-item">
+                <input type="checkbox" :id="material.id" :value="material.id" v-model="materiaisSelecionados">
+                <label :for="material.id">{{ material.nome }} ({{ material.classificacao }})</label>
+            </div>
         </div>
+      </section>
 
-        <div class="input-group">
-          <label for="grupo_fornecedor">Grupo de Fornecedor</label>
-          <select id="grupo_fornecedor" v-model="formData.grupo_fornecedor_id">
-            <option :value="null">Nenhum / Não Aplicável</option>
-            <option 
-              v-for="grupo in listaDeGrupos" 
-              :key="grupo.id" 
-              :value="grupo.id"
-            >
-              {{ grupo.nome_grupo }}
-            </option>
-          </select>
+      <div class="form-actions">
+        <button type="submit" :disabled="loadingSave" class="btn-submit">
+          {{ loadingSave ? 'Salvando...' : (isEditing ? 'Salvar Alterações' : 'Criar Fornecedor') }}
+        </button>
         </div>
-        <div class="input-group-split" v-if="isEditing">
-          <div class="input-group">
-            <label for="status_homologacao">Status de Homologação</label>
-            <select id="status_homologacao" v-model="formData.status_homologacao">
-              <option>Em Avaliação</option>
-              <option>Aprovado</option>
-              <option>Aprovado com Restrições</option>
-              <option>Reprovado</option>
-              <option>Inativo</option>
-            </select>
-          </div>
-          <div class="input-group">
-            <label for="data_homologacao">Data da Homologação</label>
-            <input type="date" id="data_homologacao" v-model="formData.data_homologacao">
-          </div>
-        </div>
-
-        <hr class="divider">
-        
-        <h4>Informações de Contato</h4>
-        
-        <div class="input-group">
-          <label for="contato_nome">Nome do Contato</label>
-          <input type="text" id="contato_nome" v-model="formData.contato_nome">
-        </div>
-        <div class="input-group-split">
-          <div class="input-group">
-            <label for="contato_email">Email</label>
-            <input type="email" id="contato_email" v-model="formData.contato_email">
-          </div>
-          <div class="input-group">
-            <label for="contato_telefone">Telefone</label>
-            <input type="tel" id="contato_telefone" v-model="formData.contato_telefone">
-          </div>
-        </div>
-        <div class="input-group">
-          <label for="endereco">Endereço</label>
-          <textarea id="endereco" rows="3" v-model="formData.endereco"></textarea>
-        </div>
-
-        <p v-if="errorMsg" class="error-message">
-          {{ errorMsg }}
-        </p>
-
-        <div class="action-buttons">
-          <button type="submit" class="button-salvar" :disabled="loading">
-            {{ loading ? 'Salvando...' : 'Salvar' }}
-          </button>
-          <RouterLink to="/fornecedores" class="button-cancelar">
-            Cancelar
-          </RouterLink>
-        </div>
-      </form>
-    </section>
+      <p v-if="saveError" class="error-message">{{ saveError }}</p>
+    </form>
   </div>
 </template>
 
+<script setup>
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { supabase } from '@/supabase'
+
+const route = useRoute()
+const router = useRouter()
+const fornecedorId = route.params.id
+
+// --- ESTADOS GERAIS ---
+const form = ref({
+  id: null,
+  nome: '',
+  cnpj: '',
+  contato: '',
+  escopo_fornecimento: '',
+  grupo_fornecedor_id: '',
+})
+const grupos = ref([]) // Lista de grupos para o dropdown
+const materiais = ref([]) // Lista mestra de materiais disponíveis
+const materiaisSelecionados = ref([]) // IDs dos materiais que o fornecedor JÁ fornece
+
+const loadingForm = ref(true)
+const loadingMateriais = ref(true)
+const loadingSave = ref(false)
+const fetchError = ref(null)
+const saveError = ref(null)
+
+const isEditing = computed(() => !!fornecedorId)
+
+// --- FUNÇÕES DE CARREGAMENTO ---
+
+/**
+ * Carrega a lista de materiais cadastrados (tabela materias_primas)
+ */
+async function fetchMateriais() {
+    loadingMateriais.value = true
+    try {
+        const { data, error } = await supabase
+            .from('materias_primas')
+            .select('id, nome, classificacao')
+            .order('nome', { ascending: true })
+        
+        if (error) throw error
+        materiais.value = data
+
+    } catch (error) {
+        console.error('Erro ao carregar materiais:', error)
+        fetchError.value = 'Falha ao carregar lista de materiais. ' + error.message
+    } finally {
+        loadingMateriais.value = false
+    }
+}
+
+/**
+ * Carrega os materiais que o fornecedor JÁ fornece (tabela fornecedor_materiais)
+ */
+async function fetchMateriaisFornecidos() {
+    if (!fornecedorId) return
+    try {
+        const { data, error } = await supabase
+            .from('fornecedor_materiais')
+            .select('materia_prima_id')
+            .eq('fornecedor_id', fornecedorId)
+
+        if (error) throw error
+        // Mapeia para um array simples de IDs
+        materiaisSelecionados.value = data.map(item => item.materia_prima_id)
+
+    } catch (error) {
+        console.error('Erro ao carregar materiais fornecidos:', error)
+        fetchError.value = 'Falha ao carregar materiais fornecidos. ' + error.message
+    }
+}
+
+/**
+ * Carrega dados do formulário (Grupos e Fornecedor, se for edição)
+ */
+async function fetchFormData() {
+    loadingForm.value = true
+    fetchError.value = null
+
+    try {
+        // 1. Carregar Grupos
+        const { data: gruposData, error: gruposError } = await supabase
+            .from('grupos_fornecedor')
+            .select('id, nome')
+            
+        if (gruposError) throw gruposError
+        grupos.value = gruposData
+
+        // 2. Carregar Dados do Fornecedor (Apenas se for edição)
+        if (isEditing.value) {
+            const { data: fornecedorData, error: fornError } = await supabase
+                .from('fornecedores')
+                .select('*')
+                .eq('id', fornecedorId)
+                .single()
+                
+            if (fornError) throw fornError
+            form.value = { ...fornecedorData, id: fornecedorId }
+        }
+
+    } catch (error) {
+        console.error('Erro ao carregar dados do formulário:', error)
+        fetchError.value = 'Falha ao carregar dados: ' + error.message
+    } finally {
+        loadingForm.value = false
+    }
+}
+
+// --- FUNÇÕES DE SALVAMENTO ---
+
+/**
+ * Salva o registro na tabela fornecedores e gerencia a tabela pivô.
+ */
+async function handleSave() {
+    loadingSave.value = true
+    saveError.value = null
+
+    try {
+        let fornecedorRecemCriadoId = fornecedorId
+        
+        // 1. Salvar o Fornecedor (INSERT/UPDATE)
+        if (isEditing.value) {
+            // UPDATE
+            const { error } = await supabase
+                .from('fornecedores')
+                .update({ ...form.value })
+                .eq('id', fornecedorId)
+                
+            if (error) throw error
+        } else {
+            // INSERT
+            const { data, error } = await supabase
+                .from('fornecedores')
+                .insert({ ...form.value })
+                .select('id')
+                .single()
+            
+            if (error) throw error
+            fornecedorRecemCriadoId = data.id
+        }
+
+        // 2. Gerenciar a Tabela Pivô (fornecedor_materiais)
+        await syncMateriais(fornecedorRecemCriadoId)
+
+        alert(`Fornecedor ${form.value.nome} salvo com sucesso!`)
+        // Redireciona para a lista após o sucesso
+        router.push({ name: 'fornecedores-lista' })
+
+    } catch (error) {
+        console.error('Erro ao salvar:', error)
+        saveError.value = `Falha ao salvar fornecedor: ${error.message}`
+    } finally {
+        loadingSave.value = false
+    }
+}
+
+/**
+ * Sincroniza a lista de materiais fornecidos pelo fornecedor.
+ */
+async function syncMateriais(id) {
+    // 1. Obter a lista atual de materiais no banco
+    const { data: materiaisAtuais, error: fetchError } = await supabase
+        .from('fornecedor_materiais')
+        .select('materia_prima_id')
+        .eq('fornecedor_id', id)
+        
+    if (fetchError) throw fetchError
+    const idsAtuais = new Set(materiaisAtuais.map(item => item.materia_prima_id))
+
+    // 2. Determinar o que deletar e o que inserir
+    const idsParaDeletar = [...idsAtuais].filter(
+        idAtual => !materiaisSelecionados.value.includes(idAtual)
+    )
+    const idsParaInserir = materiaisSelecionados.value.filter(
+        idSelecionado => !idsAtuais.has(idSelecionado)
+    )
+
+    // 3. Executar Deletes
+    if (idsParaDeletar.length > 0) {
+        const { error: deleteError } = await supabase
+            .from('fornecedor_materiais')
+            .delete()
+            .eq('fornecedor_id', id)
+            .in('materia_prima_id', idsParaDeletar)
+        if (deleteError) throw deleteError
+    }
+
+    // 4. Executar Inserts
+    if (idsParaInserir.length > 0) {
+        const registrosParaInserir = idsParaInserir.map(material_id => ({
+            fornecedor_id: id,
+            materia_prima_id: material_id
+        }))
+        const { error: insertError } = await supabase
+            .from('fornecedor_materiais')
+            .insert(registrosParaInserir)
+        if (insertError) throw insertError
+    }
+}
+
+
+// --- CICLO DE VIDA ---
+onMounted(async () => {
+    await fetchFormData()
+    await fetchMateriais()
+    // Carregar materiais fornecidos deve ser feito APÓS carregar os dados do fornecedor
+    await fetchMateriaisFornecidos() 
+
+    // Se houver erro de carregamento (ex: RLS), ele será exibido
+    if (fetchError.value) {
+        loadingForm.value = false
+        loadingMateriais.value = false
+    }
+})
+
+</script>
+
 <style scoped>
-/* (O CSS é o mesmo do Passo 11.4, está correto) */
-h2 {
-  margin-top: 0;
-  border-bottom: 2px solid #eee;
-  padding-bottom: 0.5rem;
-  margin-bottom: 2rem;
+.fornecedor-form-view {
+    max-width: 1200px;
+    margin: 2rem auto;
+    font-family: Arial, sans-serif;
 }
-.form-section {
-  background: #fff;
-  padding: 2.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  max-width: 800px; 
-  margin: 0 auto; 
+.page-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #c50d42;
 }
-.loading {
-  text-align: center;
-  padding: 3rem;
-  font-style: italic;
-  color: #777;
+.page-header h1 {
+    margin-left: 20px;
 }
-.cadastro-form { display: flex; flex-direction: column; gap: 1.2rem; }
-.input-group { display: flex; flex-direction: column; }
-.input-group label { margin-bottom: 0.5rem; font-weight: 600; color: #444; }
-.input-group input, .input-group select, .input-group textarea {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  box-sizing: border-box; 
-  font-size: 1rem;
-  font-family: inherit;
-  background-color: #fdfdfd;
+.btn-voltar {
+    background: #f4f4f4;
+    color: #333;
+    padding: 8px 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
 }
-.input-group-split { display: flex; gap: 1rem; }
-.input-group-split > .input-group { flex: 1; }
-.divider { border: none; border-top: 1px solid #eee; margin: 0.5rem 0; }
-.action-buttons {
-  display: flex;
-  gap: 1rem;
-  margin-top: 1.5rem;
-}
-.button-salvar {
-  padding: 0.85rem 1.5rem;
-  border: none;
-  border-radius: 4px;
-  background-color: #28a745;
-  color: white;
-  font-size: 1.1rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.button-salvar:disabled { background-color: #ccc; }
-.button-cancelar {
-  padding: 0.85rem 1.5rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background-color: #fff;
-  color: #555;
-  font-size: 1.1rem;
-  font-weight: 600;
-  cursor: pointer;
-  text-decoration: none;
-}
-.button-cancelar:hover { background-color: #f8f8f8; }
-
-/* --- NOVO ESTILO PARA A MENSAGEM DE ERRO --- */
-.error-message {
-  color: #dc3545; /* Vermelho */
-  background-color: #f8d7da; /* Fundo vermelho claro */
-  border: 1px solid #f5c6cb; /* Borda vermelha */
-  padding: 1rem;
-  border-radius: 4px;
-  font-weight: 600;
-  margin-top: 0;
-  margin-bottom: 1.5rem; /* Espaço antes dos botões */
-  text-align: center;
-}
-
-@media (max-width: 768px) {
-  .input-group-split {
-    flex-direction: column; 
-    gap: 1.2rem;
-  }
-  .form-section {
+.card {
+    background-color: #fff;
+    border: 1px solid #eee;
+    border-radius: 8px;
     padding: 1.5rem;
-  }
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+}
+.loading-state, .empty-state, .error-message {
+    text-align: center;
+    padding: 1rem 0;
+    color: #888;
+}
+.error-message {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* Estrutura do Formulário */
+.section-group {
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px dashed #ddd;
+}
+.section-group h2 {
+    color: #007bff;
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+.instrucao {
+    font-style: italic;
+    color: #666;
+    margin-bottom: 15px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+}
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+.form-group label {
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: #333;
+}
+.form-group input, .form-group select {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+/* Materiais Checkboxes */
+.material-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    background-color: #f7f7f7;
+    padding: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.checkbox-item:hover {
+    background-color: #eee;
+}
+.checkbox-item input[type="checkbox"] {
+    margin-right: 10px;
+    transform: scale(1.2);
+}
+.checkbox-item label {
+    font-weight: normal;
+    cursor: pointer;
+}
+
+/* Botões de Ação */
+.form-actions {
+    margin-top: 20px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 15px;
+}
+.btn-submit {
+    background-color: #c50d42;
+    color: white;
+    padding: 12px 25px;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.btn-submit:hover:not(:disabled) {
+    background-color: #a30b37;
+}
+.btn-submit:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
 }
 </style>
