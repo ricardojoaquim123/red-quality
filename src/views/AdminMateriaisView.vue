@@ -136,25 +136,21 @@
 </template>
 
 <script setup>
+// O SCRIPT SETUP INTEIRO PERMANECE IDÊNTICO AO ANTERIOR
 import { ref, onMounted, computed } from 'vue'
 import { supabase } from '@/supabase'
 
-// --- ESTADO GERAL ---
 const materiais = ref([])
 const tiposDocumento = ref([]) 
 const loadingList = ref(true)
 const loadingMaterial = ref(false)
 const listError = ref(null)
 const materialError = ref(null)
-
-// NOVO ESTADO: Filtro de Busca
 const filtroBusca = ref('')
 
-// --- ESTADO FORMULÁRIO DE MATERIAL ---
 const materialForm = ref({ id: null, nome: '', codigo_interno: '', classificacao: '' })
 const isEditing = computed(() => !!materialForm.value.id)
 
-// --- ESTADO MODAL DE REQUISITOS ---
 const modalRequisitosAberto = ref(false)
 const materialSelecionado = ref(null)
 const requisitosAtuais = ref([]) 
@@ -163,7 +159,6 @@ const loadingRequisitos = ref(true)
 const loadingTipos = ref(true)
 const requisitosError = ref(null)
 
-// --- COMPUTED PROPS ---
 const requisitosMap = ref({})
 const getReqCount = (materialId) => requisitosMap.value[materialId] || 0
 
@@ -176,13 +171,11 @@ const getDocumentoNome = (tipoId) => {
     return tipo ? tipo.nome_documento : 'Documento Desconhecido'
 }
 
-// NOVA COMPUTED: Filtra e Agrupa a lista de materiais
 const materiaisAgrupados = computed(() => {
   const termo = filtroBusca.value.toLowerCase().trim()
   
-  // 1. Filtra a lista primeiro
   const materiaisFiltrados = materiais.value.filter(material => {
-    if (!termo) return true // Se o filtro estiver vazio, mostra todos
+    if (!termo) return true 
     
     const nomeMatch = material.nome.toLowerCase().includes(termo)
     const codigoMatch = material.codigo_interno ? material.codigo_interno.toLowerCase().includes(termo) : false
@@ -190,33 +183,28 @@ const materiaisAgrupados = computed(() => {
     return nomeMatch || codigoMatch
   })
 
-  // 2. Agrupa os materiais filtrados
   const grupos = {
     'Produtivo': [],
     'Improdutivo': [],
     'Serviço': [],
-    'Outros': [] // Grupo de fallback
+    'Outros': [] 
   }
 
   materiaisFiltrados.forEach(material => {
     if (grupos[material.classificacao]) {
       grupos[material.classificacao].push(material)
     } else {
-      grupos['Outros'].push(material) // Se a classificação for nula ou inesperada
+      grupos['Outros'].push(material) 
     }
   })
 
-  // 3. Formata para o v-for do template
   return [
     { classificacao: 'Produtivo', materiais: grupos['Produtivo'] },
     { classificacao: 'Improdutivo', materiais: grupos['Improdutivo'] },
     { classificacao: 'Serviço', materiais: grupos['Serviço'] },
     { classificacao: 'Outros', materiais: grupos['Outros'] }
-  ].filter(g => g.materiais.length > 0 || !termo) // Só mostra o grupo se ele tiver itens OU se o filtro estiver vazio
+  ].filter(g => g.materiais.length > 0 || !termo) 
 })
-
-
-// --- FUNÇÕES DE CARREGAMENTO (Sem mudanças) ---
 
 async function fetchMateriais() {
   loadingList.value = true
@@ -272,9 +260,6 @@ async function fetchRequisitosECount() {
         console.error('Erro ao carregar contagem de requisitos:', error)
     }
 }
-
-
-// --- FUNÇÕES DE CRUD DO MATERIAL (Sem mudanças) ---
 
 function resetForm() {
     materialForm.value = { id: null, nome: '', codigo_interno: '', classificacao: '' }
@@ -371,9 +356,6 @@ async function handleDeleteMaterial(material) {
   }
 }
 
-
-// --- FUNÇÕES DE GESTÃO DE REQUISITOS (Modal) (Sem mudanças) ---
-
 async function fetchRequisitosAtuais() {
     if (!materialSelecionado.value) return
     loadingRequisitos.value = true
@@ -451,8 +433,6 @@ async function handleDeleteRequisito(requisitoId) {
     }
 }
 
-
-// --- CICLO DE VIDA ---
 onMounted(() => {
     fetchMateriais()
     fetchTiposDocumento()
@@ -461,7 +441,10 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* ESTILOS ATUALIZADOS */
+/* ========================================= */
+/* ARQUITETURA DE LAYOUT ATUALIZADA          */
+/* ========================================= */
+
 .admin-materiais-view { max-width: 1400px; margin: 2rem auto; font-family: Arial, sans-serif; }
 
 /* CABEÇALHO PADRÃO DE PÁGINA PRINCIPAL */
@@ -481,7 +464,7 @@ onMounted(() => {
 }
 
 .admin-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
-@media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } .list-section { order: -1; } }
+
 .card { background-color: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
 
 /* Seção de Cadastro (sem mudança) */
@@ -494,7 +477,7 @@ onMounted(() => {
 .btn-cancel { background-color: #6c757d; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }
 .error-message { color: #dc3545; margin-top: 10px; font-weight: bold; }
 
-/* --- NOVOS ESTILOS PARA LISTA AGRUPADA --- */
+/* --- SEÇÃO DA LISTA ATUALIZADA --- */
 .list-header {
   display: flex;
   justify-content: space-between;
@@ -542,9 +525,11 @@ onMounted(() => {
   list-style: none; 
   padding: 0; 
 }
+
+/* MELHORIA DE LAYOUT: Item da Lista */
 .material-item { 
   display: flex; 
-  justify-content: space-between; 
+  gap: 1rem; /* Alterado de space-between para gap */
   align-items: center; 
   padding: 10px 0; 
   border-bottom: 1px dotted #eee; 
@@ -554,6 +539,14 @@ onMounted(() => {
   color: #888;
   padding: 10px 0;
 }
+.material-info { 
+  flex-grow: 1; /* Faz o nome ocupar o espaço disponível */
+  flex-shrink: 1;
+  min-width: 0; /* Permite que o texto quebre */
+}
+.material-info strong {
+  word-break: break-word; /* Quebra nomes longos */
+}
 .material-info small { 
   display: block; 
   color: #666; 
@@ -561,13 +554,44 @@ onMounted(() => {
 .material-actions { 
   display: flex; 
   gap: 8px; 
-  flex-wrap: wrap;
+  flex-shrink: 0; /* Impede que os botões sejam "espremidos" */
+  justify-content: flex-end; /* Alinha os botões à direita */
 }
-.btn-action { padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em; border: 1px solid transparent; }
+.btn-action { 
+  padding: 6px 12px; 
+  border-radius: 4px; 
+  cursor: pointer; 
+  font-size: 0.9em; 
+  border: 1px solid transparent; 
+  white-space: nowrap; /* Impede que o texto do botão quebre */
+}
+/* FIM DA MELHORIA DE LAYOUT */
+
 .btn-edit { background-color: #ffc107; color: #333; }
 .btn-requisitos { background-color: #007bff; color: white; }
 .btn-delete { background-color: #dc3545; color: white; }
-/* --- FIM DOS NOVOS ESTILOS --- */
+/* --- FIM DOS ESTILOS DA LISTA --- */
+
+/* --- RESPONSIVIDADE --- */
+@media (max-width: 900px) { 
+  .admin-grid { grid-template-columns: 1fr; } 
+  .list-section { order: -1; } 
+}
+
+@media (max-width: 768px) {
+    /* Faz a lista empilhar em telas pequenas */
+    .material-item {
+        flex-direction: column; /* Empilha o info e os botões */
+        align-items: flex-start; /* Alinha tudo à esquerda */
+    }
+    .material-actions {
+        flex-wrap: wrap; /* Permite que os botões quebrem a linha */
+        justify-content: flex-start; /* Alinha à esquerda */
+        width: 100%; /* Ocupa todo o espaço */
+        margin-top: 0.5rem; /* Adiciona espaço quando empilhado */
+    }
+}
+/* --- FIM DA RESPONSIVIDADE --- */
 
 
 /* Modal (sem mudança) */
