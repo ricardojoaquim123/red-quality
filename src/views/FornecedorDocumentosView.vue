@@ -12,7 +12,7 @@ const fornecedor = ref(null)
 const loading = ref(true)
 
 // --- Estado da Checklist ---
-const requisitos = ref([])
+const requisitos = ref([]) // Esta ref agora receberá a lista COMBINADA
 const documentosEnviados = ref([])
 
 // --- Estado do Upload (para o Modal) ---
@@ -25,9 +25,14 @@ const selectedRequisito = ref(null)
 
 
 // --- 1. FUNÇÃO PRINCIPAL (Busca tudo) ---
+// ARQUITETURA ATUALIZADA: Esta função agora busca requisitos do Grupo E dos Materiais.
 async function fetchData() {
   loading.value = true
+  let requisitosGlobais = []
+  let requisitosEspecificos = []
+
   try {
+    // 1. Buscar dados do Fornecedor
     const { data: fornecedorData, error: fornecedorError } = await supabase
       .from('fornecedores')
       .select('*, grupos_fornecedor(nome_grupo)') 
@@ -36,21 +41,61 @@ async function fetchData() {
     if (fornecedorError) throw fornecedorError 
     fornecedor.value = fornecedorData
 
-    if (fornecedorData.grupo_fornecedor_id) {
-      const { data: requisitosData, error: requisitosError } = await supabase
-        .from('requisitos_grupo')
-        .select('tipos_documento(*)')
-        .eq('grupo_id', fornecedorData.grupo_fornecedor_id)
-      if (requisitosError) throw requisitosError
-      requisitos.value = requisitosData.map(r => r.tipos_documento)
-    }
-    
+    // 2. Buscar Documentos já Enviados
     const { data: enviadosData, error: enviadosError } = await supabase
       .from('documentos_fornecedor')
       .select('*')
       .eq('fornecedor_id', fornecedorId)
     if (enviadosError) throw enviadosError
     documentosEnviados.value = enviadosData
+
+    // 3. Buscar Requisitos GLOBAIS (Baseados no Grupo)
+    if (fornecedorData.grupo_fornecedor_id) {
+      const { data: reqGlobaisData, error: reqGlobaisError } = await supabase
+        .from('requisitos_grupo')
+        .select('tipos_documento(*)') // Faz o join com a tabela de tipos_documento
+        .eq('grupo_id', fornecedorData.grupo_fornecedor_id)
+      if (reqGlobaisError) throw reqGlobaisError
+      // Mapeia para uma lista de objetos 'tipos_documento'
+      requisitosGlobais = reqGlobaisData.map(r => r.tipos_documento).filter(Boolean) // .filter(Boolean) remove nulos
+    }
+    
+    // 4. Buscar Requisitos ESPECÍFICOS (Baseados nos Materiais)
+    // 4a. Achar os materiais que o fornecedor fornece
+    const { data: materiaisFornecidos, error: matError } = await supabase
+      .from('fornecedor_materiais')
+      .select('materia_prima_id')
+      .eq('fornecedor_id', fornecedorId)
+    if (matError) throw matError
+    
+    const materialIds = materiaisFornecidos.map(m => m.materia_prima_id)
+
+    // 4b. Achar os documentos exigidos por esses materiais
+    if (materialIds.length > 0) {
+      const { data: reqEspecificosData, error: reqEspecificosError } = await supabase
+        .from('requisitos_material')
+        .select('tipos_documento(*)') // Faz o join com a tabela de tipos_documento
+        .in('materia_prima_id', materialIds) // Onde o material_id está na lista que encontramos
+      if (reqEspecificosError) throw reqEspecificosError
+      // Mapeia para uma lista de objetos 'tipos_documento'
+      requisitosEspecificos = reqEspecificosData.map(r => r.tipos_documento).filter(Boolean)
+    }
+
+    // 5. Combinar e Deduplicar as duas listas
+    const todosRequisitosMap = new Map()
+    
+    // Adiciona globais
+    requisitosGlobais.forEach(doc => {
+      todosRequisitosMap.set(doc.id, doc)
+    })
+    
+    // Adiciona específicos (se já existir, será substituído, o que é ok)
+    requisitosEspecificos.forEach(doc => {
+      todosRequisitosMap.set(doc.id, doc)
+    })
+
+    // Define o estado final 'requisitos' com a lista combinada e única
+    requisitos.value = Array.from(todosRequisitosMap.values())
 
   } catch (err) {
     console.error('Erro ao buscar dados:', err)
@@ -61,6 +106,8 @@ async function fetchData() {
 }
 
 // --- 2. A "CHECKLIST" (computed) ---
+// Esta função NÃO PRECISA DE MUDANÇAS. Ela continuará funcionando
+// perfeitamente com a lista 'requisitos' combinada.
 const checklist = computed(() => {
   if (!requisitos.value) return []
   return requisitos.value.map(req => {
@@ -81,6 +128,7 @@ const checklist = computed(() => {
 })
 
 // --- 3. FUNÇÕES DE UPLOAD / MODAL ---
+// Nenhuma mudança necessária aqui.
 function onFileSelected(event) {
   fileToUpload.value = event.target.files[0]
   uploadError.value = null
@@ -150,8 +198,8 @@ async function handleUpload() {
 }
 
 // --- 4. FUNÇÕES DE ARQUIVO (DOWNLOAD E VISUALIZAR) ---
+// Nenhuma mudança necessária aqui.
 
-// NOVO: Função para Visualizar (abre no browser)
 async function visualizarFile(filePath) {
   try {
     const { data, error } = await supabase.storage
@@ -166,7 +214,6 @@ async function visualizarFile(filePath) {
   }
 }
 
-// Função de Download (força o download)
 async function downloadFile(filePath) {
   try {
     const { data, error } = await supabase.storage
@@ -228,19 +275,12 @@ onMounted(() => {
     
     <div v-if="loading" class="loading">Carregando checklist...</div>
     
-      <div v-else-if="fornecedor && !fornecedor.grupo_fornecedor_id" class="empty-list">
-      <p>Este fornecedor não está associado a nenhum "Grupo".</p>
-      <p>
-        Por favor, <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> 
-        e selecione um "Grupo de Fornecedor" para ver a checklist.
-      </p>
-    </div>
-    
       <div v-else-if="requisitos.length === 0" class="empty-list">
-      <p>O grupo (ou o fornecedor) não possui nenhum documento requerido.</p>
+      <p>Este fornecedor não possui nenhum documento requerido (nem por Grupo, nem por Material).</p>
       <p>
-        Vá até <RouterLink to="/configuracoes">Configurações</RouterLink> 
-        para definir os requisitos, ou <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> para atribuir um grupo.
+        Vá até <RouterLink to="/configuracoes">Configurações</RouterLink> ou 
+        <RouterLink to="/admin/materiais">Admin de Materiais</RouterLink> 
+        para definir os requisitos.
       </p>
     </div>
 
