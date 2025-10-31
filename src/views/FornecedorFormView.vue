@@ -20,8 +20,7 @@
           
           <div class="form-group">
             <label for="cnpj">CNPJ/ID Fiscal</label>
-            <input type="text" id="cnpj" v-model="form.cnpj">
-          </div>
+            <input type="text" id="cnpj" v-model="form.cnpj_id_fiscal" required> </div>
           
           <div class="form-group">
             <label for="contato">Contato Principal</label>
@@ -75,11 +74,11 @@ const router = useRouter()
 const fornecedorId = route.params.id
 
 // --- ESTADOS GERAIS ---
-// CORREÇÃO 1: Restaurado o 'cnpj' no estado inicial
+// CORREÇÃO 2: Atualizado estado inicial para 'cnpj_id_fiscal'
 const form = ref({
   id: null,
   nome: '',
-  cnpj: '',
+  cnpj_id_fiscal: '', 
   contato: '',
   escopo_fornecimento: '',
   grupo_fornecedor_id: '',
@@ -157,11 +156,11 @@ async function fetchFormData() {
                 
             if (fornError) throw fornError
             
-            // CORREÇÃO 2: Restaurado o 'cnpj' no preenchimento do formulário
+            // CORREÇÃO 3: Atualizado preenchimento para 'cnpj_id_fiscal'
             form.value = { 
                 id: fornecedorData.id,
                 nome: fornecedorData.nome,
-                cnpj: fornecedorData.cnpj,
+                cnpj_id_fiscal: fornecedorData.cnpj_id_fiscal,
                 contato: fornecedorData.contato,
                 escopo_fornecimento: fornecedorData.escopo_fornecimento,
                 grupo_fornecedor_id: fornecedorData.grupo_fornecedor_id
@@ -182,10 +181,10 @@ async function handleSave() {
     loadingSave.value = true
     saveError.value = null
 
-    // CORREÇÃO 3: Restaurado o 'cnpj' no payload de salvamento
+    // CORREÇÃO 4: Atualizado payload de salvamento para 'cnpj_id_fiscal'
     const payload = {
         nome: form.value.nome,
-        cnpj: form.value.cnpj,
+        cnpj_id_fiscal: form.value.cnpj_id_fiscal,
         contato: form.value.contato,
         escopo_fornecimento: form.value.escopo_fornecimento,
         grupo_fornecedor_id: form.value.grupo_fornecedor_id,
@@ -264,7 +263,6 @@ async function syncMateriais(id) {
             materia_prima_id: material_id
         }))
         
-        // CORREÇÃO 4 (BUG LATENTE): Corrigido nome da tabela de 'forneciamentos'
         const { error: insertError } = await supabase
             .from('fornecedor_materiais') 
             .insert(registrosParaInserir)
