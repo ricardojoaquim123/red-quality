@@ -20,7 +20,8 @@
           
           <div class="form-group">
             <label for="cnpj">CNPJ/ID Fiscal</label>
-            <input type="text" id="cnpj" v-model="form.cnpj_id_fiscal" required> </div>
+            <input type="text" id="cnpj" v-model="form.cnpj_id_fiscal" required>
+          </div>
           
           <div class="form-group">
             <label for="contato">Contato Principal</label>
@@ -37,6 +38,18 @@
             <label for="escopo">Escopo de Fornecimento</label>
             <input type="text" id="escopo" v-model="form.escopo_fornecimento">
           </div>
+          
+          <div class="form-group">
+            <label for="status_homologacao">Status de Homologação</label>
+            <select id="status_homologacao" v-model="form.status_homologacao" required>
+              <option value="Em Avaliação">Em Avaliação</option>
+              <option value="Aprovado">Aprovado</option>
+              <option value="Aprovado com Restrições">Aprovado com Restrições</option>
+              <option value="Reprovado">Reprovado</option>
+              <option value="Inativo">Inativo</option>
+            </select>
+          </div>
+          
         </div>
       </section>
       
@@ -74,7 +87,7 @@ const router = useRouter()
 const fornecedorId = route.params.id
 
 // --- ESTADOS GERAIS ---
-// CORREÇÃO 2: Atualizado estado inicial para 'cnpj_id_fiscal'
+// CORREÇÃO 1: Adicionado 'status_homologacao' ao estado inicial (com o valor default do DB)
 const form = ref({
   id: null,
   nome: '',
@@ -82,6 +95,7 @@ const form = ref({
   contato: '',
   escopo_fornecimento: '',
   grupo_fornecedor_id: '',
+  status_homologacao: 'Em Avaliação', // <-- NOVO
 })
 const grupos = ref([]) 
 const materiais = ref([]) 
@@ -150,24 +164,26 @@ async function fetchFormData() {
         if (isEditing.value) {
             const { data: fornecedorData, error: fornError } = await supabase
                 .from('fornecedores')
-                .select('*')
+                .select('*') // Busca todas as colunas, incluindo a nova 'status_homologacao'
                 .eq('id', fornecedorId)
                 .single()
                 
             if (fornError) throw fornError
             
-            // CORREÇÃO 3: Atualizado preenchimento para 'cnpj_id_fiscal'
+            // CORREÇÃO 2: Adicionado 'status_homologacao' ao preenchimento do formulário
             form.value = { 
                 id: fornecedorData.id,
                 nome: fornecedorData.nome,
                 cnpj_id_fiscal: fornecedorData.cnpj_id_fiscal,
                 contato: fornecedorData.contato,
                 escopo_fornecimento: fornecedorData.escopo_fornecimento,
-                grupo_fornecedor_id: fornecedorData.grupo_fornecedor_id
+                grupo_fornecedor_id: fornecedorData.grupo_fornecedor_id,
+                status_homologacao: fornecedorData.status_homologacao, // <-- NOVO
             }
         }
 
-    } catch (error) {
+    } catch (error)
+    {
         console.error('Erro ao carregar dados do formulário:', error)
         fetchError.value = 'Falha ao carregar dados: ' + error.message
     } finally {
@@ -181,13 +197,14 @@ async function handleSave() {
     loadingSave.value = true
     saveError.value = null
 
-    // CORREÇÃO 4: Atualizado payload de salvamento para 'cnpj_id_fiscal'
+    // CORREÇÃO 3: Adicionado 'status_homologacao' ao payload de salvamento
     const payload = {
         nome: form.value.nome,
         cnpj_id_fiscal: form.value.cnpj_id_fiscal,
         contato: form.value.contato,
         escopo_fornecimento: form.value.escopo_fornecimento,
         grupo_fornecedor_id: form.value.grupo_fornecedor_id,
+        status_homologacao: form.value.status_homologacao, // <-- NOVO
     }
 
     try {
