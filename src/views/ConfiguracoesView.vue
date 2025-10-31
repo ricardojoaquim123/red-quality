@@ -92,7 +92,6 @@ async function deleteTipoDocumento(id) {
 async function fetchCategorias() {
   loadingCategorias.value = true
   try {
-    // Busca da nova tabela que criamos
     const { data, error } = await supabase.from('categorias_materiais').select('*').order('nome')
     if (error) throw error
     categorias.value = data
@@ -115,7 +114,8 @@ async function deleteCategoria(id, nome) {
     if (error) throw error
     categorias.value = categorias.value.filter(c => c.id !== id)
   } catch (err) {
-    alert('Erro ao deletar categoria: 'M' + err.message)
+    // ESTA É A LINHA CORRIGIDA
+    alert('Erro ao deletar categoria: ' + err.message)
   }
 }
 
