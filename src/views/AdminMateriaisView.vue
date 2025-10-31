@@ -75,7 +75,7 @@
                         <option value="" disabled>Selecione o Tipo de Documento</option>
                         
                         <option v-for="tipo in tiposDocumentoDisponiveis" :key="tipo.id" :value="tipo.id">
-                            {{ tipo.nome_documento || tipo.descricao }}
+                            {{ tipo.nome_documento }}
                         </option>
                     </select>
                     <button @click="handleAddRequisito" :disabled="!tipoDocumentoSelecionado" class="btn-submit btn-add">
@@ -107,7 +107,7 @@ import { supabase } from '@/supabase'
 
 // --- ESTADO GERAL ---
 const materiais = ref([])
-const tiposDocumento = ref([]) // Lista mestra de tipos de documento
+const tiposDocumento = ref([]) 
 const loadingList = ref(true)
 const loadingMaterial = ref(false)
 const listError = ref(null)
@@ -120,26 +120,24 @@ const isEditing = computed(() => !!materialForm.value.id)
 // --- ESTADO MODAL DE REQUISITOS ---
 const modalRequisitosAberto = ref(false)
 const materialSelecionado = ref(null)
-const requisitosAtuais = ref([]) // Requisitos específicos deste material
+const requisitosAtuais = ref([]) 
 const tipoDocumentoSelecionado = ref('')
 const loadingRequisitos = ref(true)
 const loadingTipos = ref(true)
 const requisitosError = ref(null)
 
 // --- COMPUTED PROPS DE REQUISITOS ---
-// Cria um mapa de contagem de requisitos para a lista principal
 const requisitosMap = ref({})
 const getReqCount = (materialId) => requisitosMap.value[materialId] || 0
 
-// Filtra os tipos de documento que já foram adicionados para o material selecionado
 const tiposDocumentoDisponiveis = computed(() => {
     const idsAtuais = new Set(requisitosAtuais.value.map(req => req.tipo_documento_id))
     return tiposDocumento.value.filter(tipo => !idsAtuais.has(tipo.id))
 })
 const getDocumentoNome = (tipoId) => {
     const tipo = tiposDocumento.value.find(t => t.id === tipoId)
-    // CORREÇÃO 3: Removido 'tipo.nome' do fallback
-    return tipo ? (tipo.nome_documento || tipo.descricao) : 'Documento Desconhecido'
+    // CORREÇÃO 3: Removido 'tipo.descricao' do fallback
+    return tipo ? tipo.nome_documento : 'Documento Desconhecido'
 }
 
 
@@ -167,17 +165,17 @@ async function fetchMateriais() {
 async function fetchTiposDocumento() {
     loadingTipos.value = true
     try {
-        // CORREÇÃO 2: Removida a coluna 'nome' da consulta
+        // CORREÇÃO 2: Removida a coluna 'descricao' da consulta
         const { data, error } = await supabase
             .from('tipos_documento')
-            .select('id, descricao, nome_documento') 
+            .select('id, nome_documento') 
 
         if (error) throw error
         tiposDocumento.value = data
     } catch (error) {
         console.error('Erro ao carregar tipos de documento:', error)
-        // O erro agora aparecerá aqui se 'descricao' ou 'nome_documento' também não existirem
         listError.value = `Falha ao carregar Tipos de Documento: ${error.message}`
+        // Se 'nome_documento' também não existir, o erro aparecerá aqui
     } finally {
         loadingTipos.value = false
     }
@@ -185,7 +183,6 @@ async function fetchTiposDocumento() {
 
 async function fetchRequisitosECount() {
     try {
-        // 1. Busca todos os requisitos e conta por material
         const { data: todosReq, error: reqError } = await supabase
             .from('requisitos_material')
             .select('materia_prima_id')
@@ -221,8 +218,6 @@ async function handleMaterialSubmit() {
     materialError.value = null
     const isUpdate = isEditing.value
 
-    // Lógica de Salvamento (INSERT/UPDATE)
-
     try {
         const payload = { 
             nome: materialForm.value.nome,
@@ -249,7 +244,7 @@ async function handleMaterialSubmit() {
 
         alert(`Material ${isUpdate ? 'atualizado' : 'cadastrado'} com sucesso!`)
         resetForm()
-        await fetchMateriais() // Recarrega a lista
+        await fetchMateriais() 
         
     } catch (error) {
         console.error('Erro ao salvar material:', error)
@@ -268,7 +263,6 @@ async function fetchRequisitosAtuais() {
     requisitosError.value = null
 
     try {
-        // Busca os requisitos ATUAIS para o material selecionado
         const { data, error } = await supabase
             .from('requisitos_material')
             .select('*')
@@ -296,7 +290,7 @@ function closeRequisitosModal() {
     modalRequisitosAberto.value = false
     materialSelecionado.value = null
     requisitosAtuais.value = []
-    fetchRequisitosECount() // Atualiza a contagem na lista principal
+    fetchRequisitosECount() 
 }
 
 async function handleAddRequisito() {
@@ -313,7 +307,7 @@ async function handleAddRequisito() {
         if (error) throw error
         
         tipoDocumentoSelecionado.value = ''
-        await fetchRequisitosAtuais() // Recarrega a lista de requisitos do modal
+        await fetchRequisitosAtuais() 
         
     } catch (error) {
         console.error('Erro ao adicionar requisito:', error)
@@ -332,7 +326,7 @@ async function handleDeleteRequisito(requisitoId) {
         
         if (error) throw error
         
-        await fetchRequisitosAtuais() // Recarrega a lista de requisitos do modal
+        await fetchRequisitosAtuais() 
 
     } catch (error) {
         console.error('Erro ao deletar requisito:', error)
