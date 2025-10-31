@@ -81,9 +81,9 @@ const form = ref({
   escopo_fornecimento: '',
   grupo_fornecedor_id: '',
 })
-const grupos = ref([]) // Lista de grupos para o dropdown
-const materiais = ref([]) // Lista mestra de materiais disponíveis
-const materiaisSelecionados = ref([]) // IDs dos materiais que o fornecedor JÁ fornece
+const grupos = ref([]) 
+const materiais = ref([]) 
+const materiaisSelecionados = ref([]) 
 
 const loadingForm = ref(true)
 const loadingMateriais = ref(true)
@@ -95,9 +95,6 @@ const isEditing = computed(() => !!fornecedorId)
 
 // --- FUNÇÕES DE CARREGAMENTO ---
 
-/**
- * Carrega a lista de materiais cadastrados (tabela materias_primas)
- */
 async function fetchMateriais() {
     loadingMateriais.value = true
     try {
@@ -117,9 +114,6 @@ async function fetchMateriais() {
     }
 }
 
-/**
- * Carrega os materiais que o fornecedor JÁ fornece (tabela fornecedor_materiais)
- */
 async function fetchMateriaisFornecidos() {
     if (!fornecedorId) return
     try {
@@ -137,19 +131,15 @@ async function fetchMateriaisFornecidos() {
     }
 }
 
-/**
- * Carrega dados do formulário (Grupos e Fornecedor, se for edição)
- */
 async function fetchFormData() {
     loadingForm.value = true
     fetchError.value = null
 
     try {
         // 1. Carregar Grupos
-        // CORREÇÃO 2: Buscando a coluna correta ('nome_grupo')
         const { data: gruposData, error: gruposError } = await supabase
             .from('grupos_fornecedor')
-            .select('id, nome_grupo') // <-- CORRIGIDO de 'descricao' para 'nome_grupo'
+            .select('id, nome_grupo')
             
         if (gruposError) throw gruposError
         grupos.value = gruposData
@@ -163,7 +153,15 @@ async function fetchFormData() {
                 .single()
                 
             if (fornError) throw fornError
-            form.value = { ...fornecedorData, id: fornecedorId }
+            // Preenche o formulário com dados existentes
+            form.value = { 
+                id: fornecedorData.id,
+                nome: fornecedorData.nome,
+                cnpj: fornecedorData.cnpj,
+                contato: fornecedorData.contato,
+                escopo_fornecimento: fornecedorData.escopo_fornecimento,
+                grupo_fornecedor_id: fornecedorData.grupo_fornecedor_id
+            }
         }
 
     } catch (error) {
@@ -180,39 +178,49 @@ async function fetchFormData() {
  * Salva o registro na tabela fornecedores e gerencia a tabela pivô.
  */
 async function handleSave() {
-    // ... (a lógica de salvamento permanece a mesma) ...
     loadingSave.value = true
     saveError.value = null
+
+    // --- CORREÇÃO DE ARQUITETURA ---
+    // 1. Criar um "payload" limpo, contendo APENAS as colunas do DB.
+    // Isso evita enviar 'id: null' ou outras propriedades reativas.
+    const payload = {
+        nome: form.value.nome,
+        cnpj: form.value.cnpj,
+        contato: form.value.contato,
+        escopo_fornecimento: form.value.escopo_fornecimento,
+        grupo_fornecedor_id: form.value.grupo_fornecedor_id,
+    }
 
     try {
         let fornecedorRecemCriadoId = fornecedorId
         
-        // 1. Salvar o Fornecedor (INSERT/UPDATE)
+        // 2. Salvar o Fornecedor (INSERT/UPDATE)
         if (isEditing.value) {
-            // UPDATE
+            // UPDATE (usando o payload limpo)
             const { error } = await supabase
                 .from('fornecedores')
-                .update({ ...form.value })
+                .update(payload) // <-- Usa o payload limpo
                 .eq('id', fornecedorId)
                 
             if (error) throw error
         } else {
-            // INSERT
+            // INSERT (usando o payload limpo)
             const { data, error } = await supabase
                 .from('fornecedores')
-                .insert({ ...form.value })
+                .insert(payload) // <-- Usa o payload limpo
                 .select('id')
                 .single()
             
             if (error) throw error
             fornecedorRecemCriadoId = data.id
         }
+        // -----------------------------
 
-        // 2. Gerenciar a Tabela Pivô (fornecedor_materiais)
+        // 3. Gerenciar a Tabela Pivô (fornecedor_materiais)
         await syncMateriais(fornecedorRecemCriadoId)
 
         alert(`Fornecedor ${form.value.nome} salvo com sucesso!`)
-        // Redireciona para a lista após o sucesso
         router.push({ name: 'fornecedores-lista' })
 
     } catch (error) {
@@ -227,7 +235,6 @@ async function handleSave() {
  * Sincroniza a lista de materiais fornecidos pelo fornecedor.
  */
 async function syncMateriais(id) {
-    // ... (a lógica de sync permanece a mesma) ...
     // 1. Obter a lista atual de materiais no banco
     const { data: materiaisAtuais, error: fetchError } = await supabase
         .from('fornecedor_materiais')
@@ -274,7 +281,10 @@ onMounted(async () => {
     // Ordem das chamadas
     await fetchFormData() 
     await fetchMateriais()
-    await fetchMateriaisFornecidos() 
+    // Apenas busca materiais já selecionados se estiver editando
+    if (isEditing.value) {
+        await fetchMateriaisFornecidos()
+    } 
 
     // Se houver erro de carregamento (ex: RLS), ele será exibido
     if (fetchError.value) {
