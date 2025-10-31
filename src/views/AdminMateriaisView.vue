@@ -73,8 +73,9 @@
                 <div class="form-group-inline add-req">
                     <select v-model="tipoDocumentoSelecionado" class="select-req" required>
                         <option value="" disabled>Selecione o Tipo de Documento</option>
+                        
                         <option v-for="tipo in tiposDocumentoDisponiveis" :key="tipo.id" :value="tipo.id">
-                            {{ tipo.nome_documento || tipo.nome || tipo.descricao }}
+                            {{ tipo.nome_documento || tipo.descricao }}
                         </option>
                     </select>
                     <button @click="handleAddRequisito" :disabled="!tipoDocumentoSelecionado" class="btn-submit btn-add">
@@ -103,9 +104,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { supabase } from '@/supabase'
-// import { useAuthStore } from '@/stores/authStore' // Removido - Não estava em uso
-
-// const authStore = useAuthStore() // Removido - Não estava em uso
 
 // --- ESTADO GERAL ---
 const materiais = ref([])
@@ -140,8 +138,8 @@ const tiposDocumentoDisponiveis = computed(() => {
 })
 const getDocumentoNome = (tipoId) => {
     const tipo = tiposDocumento.value.find(t => t.id === tipoId)
-    // Usamos o nome de coluna que assumimos ser o correto
-    return tipo ? (tipo.nome_documento || tipo.nome || tipo.descricao) : 'Documento Desconhecido'
+    // CORREÇÃO 3: Removido 'tipo.nome' do fallback
+    return tipo ? (tipo.nome_documento || tipo.descricao) : 'Documento Desconhecido'
 }
 
 
@@ -169,15 +167,16 @@ async function fetchMateriais() {
 async function fetchTiposDocumento() {
     loadingTipos.value = true
     try {
-        // ESTA É A CONSULTA CORRIGIDA (que já estava no seu código)
+        // CORREÇÃO 2: Removida a coluna 'nome' da consulta
         const { data, error } = await supabase
             .from('tipos_documento')
-            .select('id, nome, descricao, nome_documento') 
+            .select('id, descricao, nome_documento') 
 
         if (error) throw error
         tiposDocumento.value = data
     } catch (error) {
         console.error('Erro ao carregar tipos de documento:', error)
+        // O erro agora aparecerá aqui se 'descricao' ou 'nome_documento' também não existirem
         listError.value = `Falha ao carregar Tipos de Documento: ${error.message}`
     } finally {
         loadingTipos.value = false
@@ -239,9 +238,11 @@ async function handleMaterialSubmit() {
                 
             if (error) throw error
         } else {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('materias_primas')
                 .insert(payload)
+                .select('id')
+                .single()
                 
             if (error) throw error
         }
