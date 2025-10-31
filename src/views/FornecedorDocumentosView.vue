@@ -1,18 +1,3 @@
-<div class="input-group" class.input-group>  ```
-
-Ou a correção não foi feita corretamente nas duas ocorrências.
-
-Abaixo, forneço o **código COMPLETO** e corrigido do arquivo **`FornecedorDocumentosView.vue`**.
-
----
-
-## 🛠️ Passo 2: Correção de Sintaxe em `FornecedorDocumentosView.vue`
-
-O erro foi corrigido nas linhas 258 e 261, trocando o seletor inválido `class.input-group` pela sintaxe correta do atributo `class="input-group"`.
-
-### Código Completo: `FornecedorDocumentosView.vue`
-
-```html
 <template>
   <div>
     <div class="page-header">
@@ -30,18 +15,20 @@ O erro foi corrigido nas linhas 258 e 261, trocando o seletor inválido `class.i
     
     <div v-if="loading" class="loading">Carregando checklist...</div>
     
-    <div v-else-if="fornecedor && !fornecedor.grupo_fornecedor_id" class="empty-list">
-      Este fornecedor não está associado a nenhum "Grupo".
-      <br>
-      Por favor, <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> 
-      e selecione um "Grupo de Fornecedor" para ver a checklist.
+        <div v-else-if="fornecedor && !fornecedor.grupo_fornecedor_id" class="empty-list">
+      <p>Este fornecedor não está associado a nenhum "Grupo".</p>
+      <p>
+        Por favor, <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> 
+        e selecione um "Grupo de Fornecedor" para ver a checklist.
+      </p>
     </div>
     
-    <div v-else-if="requisitos.length === 0" class="empty-list">
-      O grupo (ou o fornecedor) não possui nenhum documento requerido.
-      <br>
-      Vá até <RouterLink to="/configuracoes">Configurações</RouterLink> 
-      para definir os requisitos, ou <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> para atribuir um grupo.
+        <div v-else-if="requisitos.length === 0" class="empty-list">
+      <p>O grupo (ou o fornecedor) não possui nenhum documento requerido.</p>
+      <p>
+        Vá até <RouterLink to="/configuracoes">Configurações</RouterLink> 
+        para definir os requisitos, ou <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> para atribuir um grupo.
+      </p>
     </div>
 
     <section v-else class="list-section">
@@ -154,6 +141,7 @@ O erro foi corrigido nas linhas 258 e 261, trocando o seletor inválido `class.i
             </button>
           </div>
         </form>
+        
       </div>
     </div>
     
