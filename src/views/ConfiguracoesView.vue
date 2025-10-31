@@ -1,5 +1,4 @@
 <script setup>
-// Importamos 'computed' para criar as listas dinâmicas
 import { ref, onMounted, computed } from 'vue'
 import { supabase } from '@/supabase'
 
@@ -14,13 +13,18 @@ const novoTipoDocNome = ref('')
 const novoTipoDocValidade = ref(true)
 const loadingTiposDoc = ref(false)
 
+// --- NOVO ESTADO: "CATEGORIAS DE MATERIAIS" ---
+const categorias = ref([])
+const novaCategoriaNome = ref('')
+const loadingCategorias = ref(false)
+
 // --- ESTADO PARA A "MATRIZ" ---
-const selectedGrupo = ref(null) // Guarda o grupo que o usuário clicou
-const requisitosDoGrupo = ref([]) // Guarda os IDs dos docs requeridos
+const selectedGrupo = ref(null)
+const requisitosDoGrupo = ref([])
 const loadingRequisitos = ref(false)
 
-// --- FUNÇÕES "GRUPOS DE FORNECEDOR" ---
-async function fetchGrupos() { /* (igual a antes) */
+// --- FUNÇÕES "GRUPOS DE FORNECEDOR" (Sem mudança) ---
+async function fetchGrupos() {
   loadingGrupos.value = true
   try {
     const { data, error } = await supabase.from('grupos_fornecedor').select('*').order('nome_grupo')
@@ -29,7 +33,7 @@ async function fetchGrupos() { /* (igual a antes) */
   } catch (err) { alert('Erro ao buscar grupos: ' + err.message) } 
   finally { loadingGrupos.value = false }
 }
-async function handleNovoGrupo() { /* (igual a antes) */
+async function handleNovoGrupo() {
   if (novoGrupoNome.value.trim().length < 3) return alert('O nome do grupo deve ter pelo menos 3 caracteres.')
   try {
     const { data, error } = await supabase.from('grupos_fornecedor').insert({ nome_grupo: novoGrupoNome.value.trim() }).select()
@@ -43,9 +47,7 @@ async function deleteGrupo(id) {
   try {
     const { error } = await supabase.from('grupos_fornecedor').delete().eq('id', id)
     if (error) throw error
-    // Remove da lista na tela
     grupos.value = grupos.value.filter(g => g.id !== id)
-    // Se o grupo deletado era o selecionado, limpa a matriz
     if (selectedGrupo.value?.id === id) {
       selectedGrupo.value = null
     }
@@ -55,8 +57,8 @@ async function deleteGrupo(id) {
 }
 
 
-// --- FUNÇÕES "TIPOS DE DOCUMENTO" ---
-async function fetchTiposDocumento() { /* (igual a antes) */
+// --- FUNÇÕES "TIPOS DE DOCUMENTO" (Sem mudança) ---
+async function fetchTiposDocumento() {
   loadingTiposDoc.value = true
   try {
     const { data, error } = await supabase.from('tipos_documento').select('*').order('nome_documento')
@@ -65,7 +67,7 @@ async function fetchTiposDocumento() { /* (igual a antes) */
   } catch (err) { alert('Erro ao buscar tipos de documento: ' + err.message) }
   finally { loadingTiposDoc.value = false }
 }
-async function handleNovoTipoDocumento() { /* (igual a antes) */
+async function handleNovoTipoDocumento() {
   if (novoTipoDocNome.value.trim().length < 3) return alert('O nome do documento deve ter pelo menos 3 caracteres.')
   try {
     const { data, error } = await supabase.from('tipos_documento').insert({ nome_documento: novoTipoDocNome.value.trim(), requer_data_validade: novoTipoDocValidade.value }).select()
@@ -86,8 +88,39 @@ async function deleteTipoDocumento(id) {
   }
 }
 
-// --- FUNÇÕES DA "MATRIZ" (NOVAS) ---
-// 1. Busca os requisitos quando um grupo é selecionado
+// --- NOVAS FUNÇÕES: "CATEGORIAS DE MATERIAIS" ---
+async function fetchCategorias() {
+  loadingCategorias.value = true
+  try {
+    // Busca da nova tabela que criamos
+    const { data, error } = await supabase.from('categorias_materiais').select('*').order('nome')
+    if (error) throw error
+    categorias.value = data
+  } catch (err) { alert('Erro ao buscar categorias: ' + err.message) }
+  finally { loadingCategorias.value = false }
+}
+async function handleNovaCategoria() {
+  if (novaCategoriaNome.value.trim().length < 2) return alert('O nome da categoria deve ter pelo menos 2 caracteres.')
+  try {
+    const { data, error } = await supabase.from('categorias_materiais').insert({ nome: novaCategoriaNome.value.trim() }).select()
+    if (error) throw error
+    categorias.value.push(data[0]) 
+    novaCategoriaNome.value = ''
+  } catch (err) { alert('Erro ao salvar categoria: ' + err.message) }
+}
+async function deleteCategoria(id, nome) {
+  if (!window.confirm(`Tem certeza que deseja deletar a categoria "${nome}"?\n\n(Os materiais associados a ela ficarão "Sem Categoria")`)) return
+  try {
+    const { error } = await supabase.from('categorias_materiais').delete().eq('id', id)
+    if (error) throw error
+    categorias.value = categorias.value.filter(c => c.id !== id)
+  } catch (err) {
+    alert('Erro ao deletar categoria: 'M' + err.message)
+  }
+}
+
+
+// --- FUNÇÕES DA "MATRIZ" (Sem mudança) ---
 async function fetchRequisitos() {
   if (!selectedGrupo.value) return
   loadingRequisitos.value = true
@@ -95,10 +128,9 @@ async function fetchRequisitos() {
   try {
     const { data, error } = await supabase
       .from('requisitos_grupo')
-      .select('tipo_documento_id') // Só precisamos do ID do doc
-      .eq('grupo_id', selectedGrupo.value.id) // Para o grupo selecionado
+      .select('tipo_documento_id')
+      .eq('grupo_id', selectedGrupo.value.id)
     if (error) throw error
-    // Salva a lista de IDs (ex: ['id_iso9001', 'id_alvara'])
     requisitosDoGrupo.value = data.map(r => r.tipo_documento_id)
   } catch (err) {
     alert('Erro ao buscar requisitos: ' + err.message)
@@ -106,14 +138,10 @@ async function fetchRequisitos() {
     loadingRequisitos.value = false
   }
 }
-
-// 2. É chamada quando o usuário clica em um grupo na lista
 function selectGrupo(grupo) {
   selectedGrupo.value = grupo
-  fetchRequisitos() // Dispara a busca de requisitos
+  fetchRequisitos()
 }
-
-// 3. Adiciona um documento na matriz
 async function addRequisito(tipoDocumentoId) {
   try {
     const { error } = await supabase
@@ -123,14 +151,11 @@ async function addRequisito(tipoDocumentoId) {
         tipo_documento_id: tipoDocumentoId
       })
     if (error) throw error
-    // Adiciona o ID na nossa lista local para a tela atualizar
     requisitosDoGrupo.value.push(tipoDocumentoId)
   } catch (err) {
     alert('Erro ao adicionar requisito: ' + err.message)
   }
 }
-
-// 4. Remove um documento da matriz
 async function removeRequisito(tipoDocumentoId) {
   try {
     const { error } = await supabase
@@ -139,45 +164,45 @@ async function removeRequisito(tipoDocumentoId) {
       .eq('grupo_id', selectedGrupo.value.id)
       .eq('tipo_documento_id', tipoDocumentoId)
     if (error) throw error
-    // Remove o ID da nossa lista local
     requisitosDoGrupo.value = requisitosDoGrupo.value.filter(id => id !== tipoDocumentoId)
   } catch (err) {
     alert('Erro ao remover requisito: ' + err.message)
   }
 }
 
-// --- Listas Dinâmicas (NOVAS) ---
-// 'computed' cria uma lista que se atualiza sozinha
+// --- COMPUTED (Sem mudança) ---
 const documentosRequeridos = computed(() => {
-  // Filtra a lista mestre de documentos
   return tiposDocumento.value.filter(doc => 
-    requisitosDoGrupo.value.includes(doc.id) // Onde o ID está na lista de requisitos
+    requisitosDoGrupo.value.includes(doc.id)
   )
 })
-
 const documentosDisponiveis = computed(() => {
-  // Filtra a lista mestre de documentos
   return tiposDocumento.value.filter(doc => 
-    !requisitosDoGrupo.value.includes(doc.id) // Onde o ID NÃO está na lista de requisitos
+    !requisitosDoGrupo.value.includes(doc.id)
   )
 })
 
 
-// Roda as duas funções de busca quando a página carrega
+// --- ON MOUNTED (Atualizado) ---
 onMounted(() => {
   fetchGrupos()
   fetchTiposDocumento()
+  fetchCategorias() // <- Adicionado
 })
 </script>
 
 <template>
   <div>
-    <h2>Configurações da Matriz de Documentos</h2>
+    <header class="page-header">
+      <h1>⚙️ Configurações e Matrizes</h1>
+      <p>Gerencie os blocos de construção do sistema: Grupos, Tipos de Documento e Categorias de Material.</p>
+    </header>
     
-    <div class="container-split">
+    <div class="config-grid">
+      
       <section class="config-section">
-        <h3>Etapa 1: Criar Grupos</h3>
-        <p>Ex: Matéria-Prima, Serviços, Transportadoras.</p>
+        <h3>Etapa 1: Grupos de Fornecedor</h3>
+        <p>Define os "Globais". Ex: Matéria-Prima, Serviços.</p>
         <form @submit.prevent="handleNovoGrupo" class="form-inline">
           <input type="text" v-model="novoGrupoNome" placeholder="Nome do novo grupo" required />
           <button type="submit">Salvar Grupo</button>
@@ -199,8 +224,8 @@ onMounted(() => {
       </section>
       
       <section class="config-section">
-        <h3>Etapa 2: Criar Tipos de Documento</h3>
-        <p>Catálogo mestre de todos os documentos que sua empresa solicita.</p>
+        <h3>Etapa 2: Tipos de Documento</h3>
+        <p>Catálogo mestre de todos os documentos solicitados.</p>
         <form @submit.prevent="handleNovoTipoDocumento" class="form-inline-stacked">
           <input type="text" v-model="novoTipoDocNome" placeholder="Nome do novo documento (ex: ISO 9001)" required />
           <label class="checkbox-label">
@@ -221,10 +246,29 @@ onMounted(() => {
           </li>
         </ul>
       </section>
+
+      <section class="config-section">
+        <h3>Etapa 3: Categorias de Material</h3>
+        <p>Agrupamentos para materiais. Ex: Resinas, EPIs.</p>
+        <form @submit.prevent="handleNovaCategoria" class="form-inline">
+          <input type="text" v-model="novaCategoriaNome" placeholder="Nome da nova categoria" required />
+          <button type="submit">Salvar Categoria</button>
+        </form>
+        
+        <div class="loading" v-if="loadingCategorias">Carregando categorias...</div>
+        <ul v-else class="item-list">
+          <li v-for="cat in categorias" :key="cat.id">
+            <span>{{ cat.nome }}</span>
+            <button @click="deleteCategoria(cat.id, cat.nome)" class="button-delete-tiny">X</button>
+          </li>
+          <li v-if="categorias.length === 0" class="empty-list">Nenhuma categoria criada.</li>
+        </ul>
+      </section>
+
     </div>
     
     <section v-if="selectedGrupo" class="matriz-section">
-      <h3>Etapa 3: Definir Requisitos para o Grupo: <span class="grupo-selecionado">{{ selectedGrupo.nome_grupo }}</span></h3>
+      <h3>Etapa 4: Definir Requisitos para o Grupo: <span class="grupo-selecionado">{{ selectedGrupo.nome_grupo }}</span></h3>
       
       <div v-if="loadingRequisitos" class="loading">Carregando requisitos...</div>
       
@@ -257,28 +301,51 @@ onMounted(() => {
 </template>
 
 <style scoped>
-h2 {
-  margin-top: 0;
-  border-bottom: 2px solid #eee;
-  padding-bottom: 0.5rem;
-  margin-bottom: 2rem;
+/* CABEÇALHO PADRÃO DE PÁGINA PRINCIPAL */
+.page-header { 
+  margin-bottom: 2rem; 
+  padding-bottom: 1rem; 
+  border-bottom: 1px solid #c50d42; 
+}
+.page-header h1 {
+  font-size: 2rem;
+  margin: 0 0 0.25rem 0;
+}
+.page-header p {
+  font-size: 1.1rem;
+  color: #555;
+  margin: 0;
 }
 
-.container-split {
+/* ATUALIZADO: Grid para 3 colunas */
+.config-grid {
   display: grid;
   grid-template-columns: 1fr; /* Padrão Móvel */
   gap: 2rem;
+  margin-bottom: 2rem; /* Espaço antes da seção da matriz */
 }
-
 @media (min-width: 1024px) {
-  .container-split {
-    grid-template-columns: 1fr 1fr; /* PC Lado-a-Lado */
+  .config-grid {
+    grid-template-columns: 1fr 1fr 1fr; /* 3 colunas em Desktop */
   }
 }
 
+/* Grid da Matriz (Sem mudança) */
+.container-split {
+  display: grid;
+  grid-template-columns: 1fr; 
+  gap: 2rem;
+}
+@media (min-width: 1024px) {
+  .container-split {
+    grid-template-columns: 1fr 1fr; 
+  }
+}
+
+
 .config-section {
   background: #fff;
-  padding: 2rem;
+  padding: 1.5rem; /* Reduzido o padding para caber melhor */
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
@@ -290,9 +357,9 @@ h2 {
 .form-inline, .form-inline-stacked { display: flex; margin-bottom: 1.5rem; }
 .form-inline { flex-wrap: wrap; gap: 0.5rem; }
 .form-inline-stacked { flex-direction: column; gap: 1rem; }
-.form-inline input[type="text"] {
+.form-inline input[type="text"], .form-inline-stacked input[type="text"] {
   flex-grow: 1;
-  min-width: 150px; /* Evita quebra de layout */
+  min-width: 120px; /* Reduzido min-width */
   padding: 0.75rem 1rem;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -354,6 +421,7 @@ h2 {
   cursor: pointer;
   font-weight: 600;
   line-height: 20px;
+  flex-shrink: 0; /* Impede que o botão encolha */
 }
 .item-list li.selected .button-delete-tiny {
   background-color: white;
@@ -379,6 +447,7 @@ h2 {
 }
 .matriz-item span {
   flex-grow: 1;
+  word-break: break-word; /* Quebra nomes longos */
 }
 .button-action {
   padding: 0.3rem 0.6rem;
@@ -387,6 +456,7 @@ h2 {
   color: white;
   cursor: pointer;
   font-size: 0.9rem;
+  margin-left: 0.5rem; /* Adiciona espaço */
 }
 .button-add {
   background-color: #28a745; /* Verde */
