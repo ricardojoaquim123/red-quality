@@ -1,0 +1,12 @@
+# --- Configuração de Build para a Netlify ---
+# Informa à Netlify qual comando rodar e onde encontrar o site final.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# --- Regra de Redirecionamento de SPA ---
+# Esta é a "Regra de Ouro" que corrige o erro 404 ao atualizar.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
