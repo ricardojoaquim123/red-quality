@@ -114,7 +114,7 @@
             </div>
         </div>
     </div>
-    </div>
+  </div>
 </template>
 
 <script setup>
@@ -131,111 +131,105 @@ const loadingRecalculo = ref(false)
 const error = ref(null)
 const modalRegrasAberto = ref(false) 
 
-// [FetchScores e handleRecalcularScore - Permanecem os mesmos do Passo 27]
+/**
+ * CORREÇÃO: fetchScores agora usa a RPC para performance (1 consulta em vez de N+1)
+ */
 async function fetchScores() {
   loadingScores.value = true
   error.value = null
   try {
-    const { data: fornecedoresData, error: fornError } = await supabase
-      .from('fornecedores')
-      .select('id, nome')
-      .order('nome', { ascending: true })
-    if (fornError) throw fornError
+    // 1. CHAMA A NOVA FUNÇÃO RPC
+    const { data, error: rpcError } = await supabase.rpc('get_latest_annual_scores_all_suppliers');
+    
+    if (rpcError) throw rpcError;
 
-    const scoresPromises = fornecedoresData.map(async (fornecedor) => {
-      const { data: scoreData, error: scoreError } = await supabase
-        .from('fornecedor_score_historico')
-        .select('score_qualidade, score_entrega, score_final, status_monitoramento, data_referencia')
-        .eq('fornecedor_id', fornecedor.id)
-        .eq('tipo_periodo', 'anual') 
-        .order('data_referencia', { ascending: false }) 
-        .limit(1)
-        .maybeSingle() 
-        
-        if (scoreError) { console.error(`Falha ao buscar score para ${fornecedor.nome}:`, scoreError) }
-        const score = scoreData || {};
-        return { id: fornecedor.id, nome: fornecedor.nome, ...score }
-    })
-    scoreList.value = await Promise.all(scoresPromises)
+    // 2. Os dados já vêm prontos do banco
+    scoreList.value = data;
+
   } catch (err) {
     console.error('Erro geral ao carregar scores:', err)
-    error.value = err.message
+    error.value = `Falha ao carregar scores: ${err.message}. (Verifique se a função RPC 'get_latest_annual_scores_all_suppliers' foi criada.)`;
   } finally {
     loadingScores.value = false
   }
 }
+
 async function handleRecalcularScore() {
-    if (!confirm("Confirmar: Isso irá calcular o Score Anual para TODOS os fornecedores e atualizar o Painel. Continuar?")) { return; }
-    loadingRecalculo.value = true;
-    error.value = null;
-    try {
-        const today = new Date();
-        const dataReferencia = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
-        for (const fornecedor of scoreList.value) {
-            const { data, error: rpcError } = await supabase.rpc('calcular_e_salvar_score', {
-                p_fornecedor_id: fornecedor.id,
-                p_tipo_periodo: 'anual',
-                p_data_referencia: dataReferencia
-            });
-            if (rpcError) { console.error(`Erro ao calcular score para ${fornecedor.nome}:`, rpcError); }
-        }
-        alert("Recálculo concluído. Atualizando painel...");
-        await fetchScores(); 
-    } catch (err) {
-        error.value = "Erro fatal durante o processo de recálculo: " + err.message;
-    } finally {
-        loadingRecalculo.value = false;
+  if (!confirm("Confirmar: Isso irá calcular o Score Anual para TODOS os fornecedores e atualizar o Painel. Continuar?")) { return; }
+  loadingRecalculo.value = true;
+  error.value = null;
+  try {
+    const today = new Date();
+    const dataReferencia = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+    
+    // Pega a lista de IDs de fornecedores da lista já carregada
+    const fornecedorIds = scoreList.value.map(f => f.id);
+
+    for (const fornecedorId of fornecedorIds) {
+      const { data, error: rpcError } = await supabase.rpc('calcular_e_salvar_score', {
+        p_fornecedor_id: fornecedorId,
+        p_tipo_periodo: 'anual',
+        p_data_referencia: dataReferencia
+      });
+      if (rpcError) { console.error(`Erro ao calcular score para ID ${fornecedorId}:`, rpcError); }
     }
+    alert("Recálculo concluído. Atualizando painel...");
+    await fetchScores(); // Recarrega os dados com a RPC
+  } catch (err) {
+    error.value = "Erro fatal durante o processo de recálculo: " + err.message;
+  } finally {
+    loadingRecalculo.value = false;
+  }
 }
 
 /**
- * NOVO: Função para Exportar a Tabela de Score para CSV
+ * Função para Exportar a Tabela de Score para CSV
+ * (Permanece a mesma, mas agora usa os dados da RPC)
  */
 function exportToCSV() {
-    if (scoreList.value.length === 0) {
-        alert("Não há dados para exportar.");
-        return;
-    }
+  if (scoreList.value.length === 0) {
+    alert("Não há dados para exportar.");
+    return;
+  }
 
-    const headers = [
-        "ID", "Fornecedor", "Score Final", "Score Qualidade", "Score Entrega", 
-        "Status Monitoramento", "Data Avaliacao"
-    ];
+  const headers = [
+    "ID", "Fornecedor", "Score Final", "Score Qualidade", "Score Entrega", 
+    "Status Monitoramento", "Data Avaliacao"
+  ];
 
-    // Mapeia os dados do scoreList para a ordem do CSV
-    const csvData = scoreList.value.map(item => [
-        `"${item.id}"`, // ID formatado como string
-        `"${item.nome}"`,
-        (item.score_final || 0).toFixed(2).replace('.', ','), // Usa vírgula como separador decimal
-        (item.score_qualidade || 0).toFixed(2).replace('.', ','),
-        (item.score_entrega || 0).toFixed(2).replace('.', ','),
-        `"${item.status_monitoramento || 'Em Avaliação'}"`,
-        `"${item.data_referencia ? formatarData(item.data_referencia) : 'N/A'}"`
-    ].join(';')); // Usa ponto-e-vírgula como separador para CSVs pt-BR/Excel
+  const csvData = scoreList.value.map(item => [
+    `"${item.id}"`, 
+    `"${item.nome}"`,
+    (item.score_final || 0).toFixed(2).replace('.', ','), 
+    (item.score_qualidade || 0).toFixed(2).replace('.', ','),
+    (item.score_entrega || 0).toFixed(2).replace('.', ','),
+    `"${item.status_monitoramento || 'Em Avaliação'}"`,
+    `"${item.data_referencia ? formatarData(item.data_referencia) : 'N/A'}"`
+  ].join(';')); 
 
-    // Combina cabeçalhos e dados
-    const csvContent = [
-        headers.join(';'),
-        ...csvData
-    ].join('\n');
+  const csvContent = [
+    headers.join(';'),
+    ...csvData
+  ].join('\n');
 
-    // Cria o link de download
-    const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `Red-Quality_Score_Fornecedores_${new Date().toISOString().substring(0, 10)}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `Red-Quality_Score_Fornecedores_${new Date().toISOString().substring(0, 10)}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 
 // --- Funções Auxiliares (Visuais) ---
 
 function formatarData(data) {
-    return new Date(data).toLocaleDateString('pt-BR', { year: 'numeric', month: 'short' });
+  // Adiciona verificação, pois data_referencia pode ser nula
+  if (!data) return 'N/A';
+  return new Date(data).toLocaleDateString('pt-BR', { year: 'numeric', month: 'short' });
 }
 
 function getScoreColor(score) {
@@ -246,7 +240,6 @@ function getScoreColor(score) {
 }
 
 function viewHistorico(fornecedorId) {
-    // FUNÇÃO FINAL DE NAVEGAÇÃO
     router.push({ name: 'score-historico', params: { id: fornecedorId } });
 }
 
@@ -257,7 +250,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* ESTILOS (Mesmos da última vez) */
+/* Os estilos permanecem os mesmos */
 .score-view { max-width: 1400px; margin: 2rem auto; font-family: Arial, sans-serif; }
 .page-header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #c50d42; }
 .card { background-color: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }

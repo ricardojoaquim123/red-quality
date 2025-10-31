@@ -11,7 +11,6 @@
     </div>
     <div v-else-if="error" class="error-message card">
       <p>Erro ao carregar dados: {{ error }}</p>
-      <p v-if="error.includes('400')">Sugestão: Verifique se a RLS permite a leitura das tabelas de monitoramento.</p>
     </div>
     <div v-else class="historico-grid">
         
@@ -101,7 +100,11 @@ function getScoreColor(score) {
 }
 
 function formatarMes(data) {
-    return new Date(data).toLocaleDateString('pt-BR', { year: 'numeric', month: 'short' });
+    // Adiciona +1 dia (fictício) para evitar problemas de fuso horário (Timezone)
+    // Onde '2023-10-01' pode virar '2023-09-30'
+    const [ano, mes, dia] = data.split('-');
+    const dataAjustada = new Date(ano, mes - 1, Number(dia) + 1);
+    return dataAjustada.toLocaleDateString('pt-BR', { year: 'numeric', month: 'short' });
 }
 
 /**
@@ -138,32 +141,39 @@ async function fetchHistorico() {
         umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
         const dataInicial = umAnoAtras.toISOString().split('T')[0];
         
-        // 4. CORREÇÃO: Buscar monitoramento de Qualidade (possui os campos de NC)
+        // 4. Buscar monitoramento de Qualidade
         const { data: qualidadeData, error: qualError } = await supabase
             .from('monitoramento_qualidade')
             .select('mes_referencia, total_ncs, nao_conformidades_graves, notificacoes_nc')
             .eq('fornecedor_id', fornecedorId)
-            .gte('mes_referencia', dataInicial)
-            .order('mes_referencia', { ascending: false });
+            .gte('mes_referencia', dataInicial);
 
         if (qualError) throw qualError;
 
-        // 5. CORREÇÃO: Buscar monitoramento de Compras separadamente
+        // 5. Buscar monitoramento de Compras
         const { data: comprasData, error: compError } = await supabase
             .from('monitoramento_compras')
             .select('mes_referencia, total_entregas, entregas_atraso')
             .eq('fornecedor_id', fornecedorId)
-            .gte('mes_referencia', dataInicial)
-            .order('mes_referencia', { ascending: false });
+            .gte('mes_referencia', dataInicial);
 
         if (compError) throw compError;
         
-        // 6. Juntar os dados no Frontend (garantindo que todas as chaves são strings de data para o Map)
+        // --- CORREÇÃO DA LÓGICA DE JOIN ---
+        // 6. Criar Maps para ambas as fontes de dados
         const comprasMap = new Map(comprasData.map(item => [item.mes_referencia, item]));
+        const qualidadeMap = new Map(qualidadeData.map(item => [item.mes_referencia, item]));
 
-        historicoMensal.value = qualidadeData.map(qualidade => {
-            const mesKey = qualidade.mes_referencia;
-            const compras = comprasMap.get(mesKey) || {}; // Pega os dados de compras, se existirem
+        // 7. Obter um Set (lista única) de TODOS os meses de ambas as tabelas
+        const allMeses = new Set([
+            ...comprasData.map(c => c.mes_referencia),
+            ...qualidadeData.map(q => q.mes_referencia)
+        ]);
+
+        // 8. Iterar sobre a lista única de meses e combinar os dados
+        const combinedData = Array.from(allMeses).map(mesKey => {
+            const compras = comprasMap.get(mesKey) || {}; // Pega dados de compras (ou objeto vazio)
+            const qualidade = qualidadeMap.get(mesKey) || {}; // Pega dados de qualidade (ou objeto vazio)
             
             return {
                 mes_referencia: mesKey,
@@ -176,7 +186,10 @@ async function fetchHistorico() {
                 entregas_atraso: compras.entregas_atraso,
             };
         });
-
+        
+        // 9. Ordenar o resultado final por data (mais recente primeiro)
+        historicoMensal.value = combinedData.sort((a, b) => new Date(b.mes_referencia) - new Date(a.mes_referencia));
+        // --- FIM DA CORREÇÃO ---
 
     } catch (err) {
         console.error('Erro fatal ao carregar histórico:', err)
@@ -199,7 +212,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Estilos (Mesmos da última vez) */
+/* Os estilos permanecem os mesmos */
 .historico-view { max-width: 1400px; margin: 0 auto; font-family: Arial, sans-serif; }
 .page-header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #c50d42; }
 .fornecedor-nome { color: #007bff; font-weight: 700; }
