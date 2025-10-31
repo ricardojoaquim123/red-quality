@@ -15,7 +15,7 @@
     
     <div v-if="loading" class="loading">Carregando checklist...</div>
     
-    <div v-else-if="fornecedor && !fornecedor.grupo_fornecedor_id" class="empty-list">
+        <div v-else-if="fornecedor && !fornecedor.grupo_fornecedor_id" class="empty-list">
       <p>Este fornecedor não está associado a nenhum "Grupo".</p>
       <p>
         Por favor, <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> 
@@ -23,7 +23,7 @@
       </p>
     </div>
     
-    <div v-else-if="requisitos.length === 0" class="empty-list">
+        <div v-else-if="requisitos.length === 0" class="empty-list">
       <p>O grupo (ou o fornecedor) não possui nenhum documento requerido.</p>
       <p>
         Vá até <RouterLink to="/configuracoes">Configurações</RouterLink> 
@@ -73,18 +73,10 @@
               class="button-action button-download"
             >
               Baixar
-            </button>
-
-            <button
-              v-if="item.docEnviado"
-              @click="deleteFile(item.docEnviado)"
-              class="button-action button-delete"
-            >
-              Excluir
+-----------------
             </button>
           </span>
         </li>
-        
       </ul>
     </section>
     
@@ -105,7 +97,7 @@
             <div v-if="selectedRequisito.docEnviado && !fileToUpload" class="file-info">
               Arquivo atual: 
               <a href="#" @click.prevent="visualizarFile(selectedRequisito.docEnviado.arquivo_url)">
-                {{ selectedRequisito.docEnviado.nome_arquivo }}
+s               {{ selectedRequisito.docEnviado.nome_arquivo }}
               </a>
               <button 
                 @click.prevent="deleteFile(selectedRequisito.docEnviado)" 
@@ -115,24 +107,24 @@
           </div>
           
           <div class="input-group-split">
-            <div class="input-group">
+                        <div class="input-group">
               <label for="data_emissao">Data de Emissão</label>
               <input type="date" id="data_emissao" v-model="dataEmissao">
             </div>
-            <div class="input-group" v-if="selectedRequisito.requer_data_validade">
+                        <div class="input-group" v-if="selectedRequisito.requer_data_validade">
               <label for="data_validade">Data de Validade</label>
               <input 
                 type="date" 
                 id="data_validade" 
                 v-model="dataValidade"
-                :required="selectedRequisito.requer_data_validade"
+s               :required="selectedRequisito.requer_data_validade"
               >
             </div>
           </div>
           
           <p v-if="uploadError" class="error-message">{{ uploadError }}</p>
 
-          <div class="action-buttons">
+s         <div class="action-buttons">
             <button type="submit" class="button-salvar" :disabled="uploading">
               {{ uploading ? 'Enviando...' : 'Salvar' }}
             </button>
@@ -141,7 +133,6 @@
             </button>
           </div>
         </form>
-        
       </div>
     </div>
     
@@ -199,7 +190,7 @@ async function fetchData() {
       .from('documentos_fornecedor')
       .select('*')
       .eq('fornecedor_id', fornecedorId)
-    if (enviadosError) throw enviadosError
+A   if (enviadosError) throw enviadosError
     documentosEnviados.value = enviadosData
 
   } catch (err) {
@@ -251,7 +242,7 @@ function closeUploadModal() {
 }
 async function handleUpload() {
   if (!fileToUpload.value && !selectedRequisito.value.docEnviado) {
-    return uploadError.value = 'Por favor, selecione um arquivo.'
+s   return uploadError.value = 'Por favor, selecione um arquivo.'
   }
   uploading.value = true
   uploadError.value = null
@@ -280,7 +271,7 @@ async function handleUpload() {
     }
     const { error: dbError } = await supabase
       .from('documentos_fornecedor')
-      .upsert(docMetadata, { 
+s     .upsert(docMetadata, { 
         onConflict: 'fornecedor_id, tipo_documento_id'
       })
     if (dbError) throw dbError
@@ -318,7 +309,7 @@ async function visualizarFile(filePath) {
 
 // Função de Download (força o download)
 async function downloadFile(filePath) {
-  try {
+s   try {
     const { data, error } = await supabase.storage
       .from('documentos-fornecedores')
       .createSignedUrl(filePath, 60, {
@@ -344,7 +335,7 @@ async function deleteFile(docEnviado) {
       .from('documentos_fornecedor')
       .delete()
       .eq('id', docEnviado.id)
-    if (dbError) throw dbError
+s   if (dbError) throw dbError
     alert('Documento excluído com sucesso.')
     await fetchData()
   } catch (err) {
@@ -439,7 +430,6 @@ h3 { margin-top: 0; }
 .button-upload { background-color: #007bff; }
 .button-visualizar { background-color: #17a2b8; } /* Ciano (Cor nova) */
 .button-download { background-color: #6c757d; }
-.button-delete { background-color: #dc3545; }
 
 /* --- Estilos do Modal --- */
 .modal-overlay {
@@ -495,7 +485,7 @@ h3 { margin-top: 0; }
   color: white;
   border: none;
   border-radius: 50%;
-  width: 20px;
+s   width: 20px;
   height: 20px;
   cursor: pointer;
   margin-left: 10px;
@@ -506,7 +496,7 @@ h3 { margin-top: 0; }
   border: none;
   border-radius: 4px;
   background-color: #28a745;
-  color: white;
+a   color: white;
   font-size: 1rem;
   cursor: pointer;
 }
@@ -517,7 +507,7 @@ h3 { margin-top: 0; }
   border-radius: 4px;
   background-color: #fff;
   color: #555;
-  font-size: 1rem;
+s   font-size: 1rem;
   cursor: pointer;
 }
 .error-message {
