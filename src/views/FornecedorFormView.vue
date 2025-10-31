@@ -1,8 +1,14 @@
 <template>
   <div class="fornecedor-form-view">
-    <header class="page-header">
-      <button @click="router.push({ name: 'fornecedores-lista' })" class="btn-voltar">← Voltar para Lista</button>
-      <h1>{{ isEditing ? 'Editar Fornecedor' : 'Novo Fornecedor' }}</h1>
+    
+    <header class="sub-page-header">
+      <button @click="router.push({ name: 'fornecedores-lista' })" class="btn-voltar">
+        <span class="icon">&larr;</span> Voltar para Lista
+      </button>
+      <div class="header-title-container">
+        <h1>{{ isEditing ? 'Editar Fornecedor' : 'Novo Fornecedor' }}</h1>
+        <p>Preencha os dados fundamentais e os materiais fornecidos.</p>
+      </div>
     </header>
 
     <p v-if="loadingForm || loadingMateriais" class="loading-state">Carregando dados...</p>
@@ -78,6 +84,7 @@
 </template>
 
 <script setup>
+// O SCRIPT SETUP INTEIRO PERMANECE IDÊNTICO AO ANTERIOR
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/supabase'
@@ -86,8 +93,6 @@ const route = useRoute()
 const router = useRouter()
 const fornecedorId = route.params.id
 
-// --- ESTADOS GERAIS ---
-// CORREÇÃO 1: Adicionado 'status_homologacao' ao estado inicial (com o valor default do DB)
 const form = ref({
   id: null,
   nome: '',
@@ -95,7 +100,7 @@ const form = ref({
   contato: '',
   escopo_fornecimento: '',
   grupo_fornecedor_id: '',
-  status_homologacao: 'Em Avaliação', // <-- NOVO
+  status_homologacao: 'Em Avaliação', 
 })
 const grupos = ref([]) 
 const materiais = ref([]) 
@@ -108,8 +113,6 @@ const fetchError = ref(null)
 const saveError = ref(null)
 
 const isEditing = computed(() => !!fornecedorId)
-
-// --- FUNÇÕES DE CARREGAMENTO ---
 
 async function fetchMateriais() {
     loadingMateriais.value = true
@@ -152,7 +155,6 @@ async function fetchFormData() {
     fetchError.value = null
 
     try {
-        // 1. Carregar Grupos
         const { data: gruposData, error: gruposError } = await supabase
             .from('grupos_fornecedor')
             .select('id, nome_grupo')
@@ -160,17 +162,15 @@ async function fetchFormData() {
         if (gruposError) throw gruposError
         grupos.value = gruposData
 
-        // 2. Carregar Dados do Fornecedor (Apenas se for edição)
         if (isEditing.value) {
             const { data: fornecedorData, error: fornError } = await supabase
                 .from('fornecedores')
-                .select('*') // Busca todas as colunas, incluindo a nova 'status_homologacao'
+                .select('*') 
                 .eq('id', fornecedorId)
                 .single()
                 
             if (fornError) throw fornError
             
-            // CORREÇÃO 2: Adicionado 'status_homologacao' ao preenchimento do formulário
             form.value = { 
                 id: fornecedorData.id,
                 nome: fornecedorData.nome,
@@ -178,7 +178,7 @@ async function fetchFormData() {
                 contato: fornecedorData.contato,
                 escopo_fornecimento: fornecedorData.escopo_fornecimento,
                 grupo_fornecedor_id: fornecedorData.grupo_fornecedor_id,
-                status_homologacao: fornecedorData.status_homologacao, // <-- NOVO
+                status_homologacao: fornecedorData.status_homologacao, 
             }
         }
 
@@ -191,28 +191,23 @@ async function fetchFormData() {
     }
 }
 
-// --- FUNÇÕES DE SALVAMENTO ---
-
 async function handleSave() {
     loadingSave.value = true
     saveError.value = null
 
-    // CORREÇÃO 3: Adicionado 'status_homologacao' ao payload de salvamento
     const payload = {
         nome: form.value.nome,
         cnpj_id_fiscal: form.value.cnpj_id_fiscal,
         contato: form.value.contato,
         escopo_fornecimento: form.value.escopo_fornecimento,
         grupo_fornecedor_id: form.value.grupo_fornecedor_id,
-        status_homologacao: form.value.status_homologacao, // <-- NOVO
+        status_homologacao: form.value.status_homologacao, 
     }
 
     try {
         let fornecedorRecemCriadoId = fornecedorId
         
-        // Salvar o Fornecedor (INSERT/UPDATE)
         if (isEditing.value) {
-            // UPDATE
             const { error } = await supabase
                 .from('fornecedores')
                 .update(payload) 
@@ -220,7 +215,6 @@ async function handleSave() {
                 
             if (error) throw error
         } else {
-            // INSERT
             const { data, error } = await supabase
                 .from('fornecedores')
                 .insert(payload) 
@@ -231,7 +225,6 @@ async function handleSave() {
             fornecedorRecemCriadoId = data.id
         }
 
-        // Gerenciar a Tabela Pivô (fornecedor_materiais)
         await syncMateriais(fornecedorRecemCriadoId)
 
         alert(`Fornecedor ${form.value.nome} salvo com sucesso!`)
@@ -246,7 +239,6 @@ async function handleSave() {
 }
 
 async function syncMateriais(id) {
-    // 1. Obter a lista atual de materiais no banco
     const { data: materiaisAtuais, error: fetchError } = await supabase
         .from('fornecedor_materiais')
         .select('materia_prima_id')
@@ -255,7 +247,6 @@ async function syncMateriais(id) {
     if (fetchError) throw fetchError
     const idsAtuais = new Set(materiaisAtuais.map(item => item.materia_prima_id))
 
-    // 2. Determinar o que deletar e o que inserir
     const idsParaDeletar = [...idsAtuais].filter(
         idAtual => !materiaisSelecionados.value.includes(idAtual)
     )
@@ -263,7 +254,6 @@ async function syncMateriais(id) {
         idSelecionado => !idsAtuais.has(idSelecionado)
     )
 
-    // 3. Executar Deletes
     if (idsParaDeletar.length > 0) {
         const { error: deleteError } = await supabase
             .from('fornecedor_materiais')
@@ -273,7 +263,6 @@ async function syncMateriais(id) {
         if (deleteError) throw deleteError
     }
 
-    // 4. Executar Inserts
     if (idsParaInserir.length > 0) {
         const registrosParaInserir = idsParaInserir.map(material_id => ({
             fornecedor_id: id,
@@ -287,7 +276,6 @@ async function syncMateriais(id) {
     }
 }
 
-// --- CICLO DE VIDA ---
 onMounted(async () => {
     await fetchFormData() 
     await fetchMateriais()
@@ -300,15 +288,53 @@ onMounted(async () => {
         loadingMateriais.value = false
     }
 })
-
 </script>
 
 <style scoped>
-/* Estilos (Mesmos da última vez) */
+/* ESTILOS DE LAYOUT ATUALIZADOS */
 .fornecedor-form-view { max-width: 1200px; margin: 2rem auto; font-family: Arial, sans-serif; }
-.page-header { display: flex; align-items: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #c50d42; }
-.page-header h1 { margin-left: 20px; }
-.btn-voltar { background: #f4f4f4; color: #333; padding: 8px 15px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
+
+/* NOVO Estilo de Cabeçalho de Sub-Página */
+.sub-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #eee;
+}
+.btn-voltar {
+  background: #f4f4f4;
+  color: #333;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  display: inline-flex; /* Para o ícone ficar ao lado */
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  align-self: flex-start; /* Não estica o botão */
+}
+.btn-voltar .icon {
+  font-weight: bold;
+}
+.header-title-container {
+  margin-top: 0.5rem;
+}
+.header-title-container h1 {
+  margin: 0;
+  color: #c50d42; /* Cor primária para o título */
+}
+.header-title-container p {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+  color: #555;
+}
+/* Fim dos novos estilos de cabeçalho */
+
+/* Estilos de Card e Formulário (sem mudança) */
 .card { background-color: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
 .loading-state, .empty-state, .error-message { text-align: center; padding: 1rem 0; color: #888; }
 .error-message { color: #dc3545; font-weight: bold; }

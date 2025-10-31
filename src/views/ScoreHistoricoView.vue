@@ -1,9 +1,14 @@
 <template>
   <div class="historico-view">
-    <header class="page-header">
-      <button @click="router.back()" class="btn-voltar">← Voltar para o Dashboard de Score</button>
-      <h1>Histórico de Desempenho: <span class="fornecedor-nome">{{ fornecedorNome }}</span></h1>
-      <p>Análise detalhada do Score (Qualidade e Entrega) e o histórico de lançamentos mensais.</p>
+    
+    <header class="sub-page-header">
+      <button @click="router.back()" class="btn-voltar">
+        <span class="icon">&larr;</span> Voltar para o Dashboard de Score
+      </button>
+      <div class="header-title-container">
+        <h1>Histórico de Desempenho: <span class="fornecedor-nome">{{ fornecedorNome }}</span></h1>
+        <p>Análise detalhada do Score e histórico de lançamentos mensais.</p>
+      </div>
     </header>
 
     <div v-if="loading" class="loading-state card">
@@ -75,13 +80,14 @@
 </template>
 
 <script setup>
+// O SCRIPT SETUP INTEIRO PERMANECE IDÊNTICO AO ANTERIOR
 import { ref, onMounted } from 'vue'
 import { supabase } from '@/supabase'
 import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
 const route = useRoute()
-const fornecedorId = route.params.id; // ID do fornecedor vem da URL
+const fornecedorId = route.params.id; 
 
 const fornecedorNome = ref('Carregando...');
 const loading = ref(true);
@@ -89,9 +95,6 @@ const error = ref(null);
 const historicoAnual = ref([]);
 const historicoMensal = ref([]);
 
-/**
- * Funções auxiliares
- */
 function getScoreColor(score) {
     if (score === undefined || score === null) return '#888';
     if (score >= 90) return '#16a34a'; // Verde
@@ -100,22 +103,16 @@ function getScoreColor(score) {
 }
 
 function formatarMes(data) {
-    // Adiciona +1 dia (fictício) para evitar problemas de fuso horário (Timezone)
-    // Onde '2023-10-01' pode virar '2023-09-30'
     const [ano, mes, dia] = data.split('-');
     const dataAjustada = new Date(ano, mes - 1, Number(dia) + 1);
     return dataAjustada.toLocaleDateString('pt-BR', { year: 'numeric', month: 'short' });
 }
 
-/**
- * Função principal para buscar todos os dados de histórico do fornecedor.
- */
 async function fetchHistorico() {
     loading.value = true;
     error.value = null;
 
     try {
-        // 1. Busca o nome do fornecedor
         const { data: fornData, error: fornError } = await supabase
             .from('fornecedores')
             .select('nome')
@@ -125,7 +122,6 @@ async function fetchHistorico() {
         if (fornError) throw fornError;
         fornecedorNome.value = fornData.nome;
 
-        // 2. Busca o Histórico de Scores Anuais (score_historico)
         const { data: scoreData, error: scoreError } = await supabase
             .from('fornecedor_score_historico')
             .select('*')
@@ -136,12 +132,10 @@ async function fetchHistorico() {
         if (scoreError) throw scoreError;
         historicoAnual.value = scoreData;
 
-        // 3. Preparação: Calcular data de início (12 meses atrás)
         const umAnoAtras = new Date();
         umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
         const dataInicial = umAnoAtras.toISOString().split('T')[0];
         
-        // 4. Buscar monitoramento de Qualidade
         const { data: qualidadeData, error: qualError } = await supabase
             .from('monitoramento_qualidade')
             .select('mes_referencia, total_ncs, nao_conformidades_graves, notificacoes_nc')
@@ -150,7 +144,6 @@ async function fetchHistorico() {
 
         if (qualError) throw qualError;
 
-        // 5. Buscar monitoramento de Compras
         const { data: comprasData, error: compError } = await supabase
             .from('monitoramento_compras')
             .select('mes_referencia, total_entregas, entregas_atraso')
@@ -159,37 +152,29 @@ async function fetchHistorico() {
 
         if (compError) throw compError;
         
-        // --- CORREÇÃO DA LÓGICA DE JOIN ---
-        // 6. Criar Maps para ambas as fontes de dados
         const comprasMap = new Map(comprasData.map(item => [item.mes_referencia, item]));
         const qualidadeMap = new Map(qualidadeData.map(item => [item.mes_referencia, item]));
 
-        // 7. Obter um Set (lista única) de TODOS os meses de ambas as tabelas
         const allMeses = new Set([
             ...comprasData.map(c => c.mes_referencia),
             ...qualidadeData.map(q => q.mes_referencia)
         ]);
 
-        // 8. Iterar sobre a lista única de meses e combinar os dados
         const combinedData = Array.from(allMeses).map(mesKey => {
-            const compras = comprasMap.get(mesKey) || {}; // Pega dados de compras (ou objeto vazio)
-            const qualidade = qualidadeMap.get(mesKey) || {}; // Pega dados de qualidade (ou objeto vazio)
+            const compras = comprasMap.get(mesKey) || {}; 
+            const qualidade = qualidadeMap.get(mesKey) || {}; 
             
             return {
                 mes_referencia: mesKey,
-                // Dados de Qualidade
                 total_ncs: qualidade.total_ncs,
                 nao_conformidades_graves: qualidade.nao_conformidades_graves,
                 notificacoes_nc: qualidade.notificacoes_nc,
-                // Dados de Compras
                 total_entregas: compras.total_entregas,
                 entregas_atraso: compras.entregas_atraso,
             };
         });
         
-        // 9. Ordenar o resultado final por data (mais recente primeiro)
         historicoMensal.value = combinedData.sort((a, b) => new Date(b.mes_referencia) - new Date(a.mes_referencia));
-        // --- FIM DA CORREÇÃO ---
 
     } catch (err) {
         console.error('Erro fatal ao carregar histórico:', err)
@@ -212,11 +197,51 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Os estilos permanecem os mesmos */
-.historico-view { max-width: 1400px; margin: 0 auto; font-family: Arial, sans-serif; }
-.page-header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #c50d42; }
-.fornecedor-nome { color: #007bff; font-weight: 700; }
-.btn-voltar { background: #f4f4f4; color: #333; padding: 8px 15px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; margin-bottom: 15px; }
+/* ESTILOS DE LAYOUT ATUALIZADOS */
+.historico-view { max-width: 1400px; margin: 2rem auto; font-family: Arial, sans-serif; }
+
+/* NOVO Estilo de Cabeçalho de Sub-Página */
+.sub-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #eee;
+}
+.btn-voltar {
+  background: #f4f4f4;
+  color: #333;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  align-self: flex-start;
+}
+.btn-voltar .icon {
+  font-weight: bold;
+}
+.header-title-container {
+  margin-top: 0.5rem;
+}
+.header-title-container h1 {
+  margin: 0;
+  color: #c50d42; /* Cor primária */
+}
+.header-title-container p {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+  color: #555;
+}
+.fornecedor-nome { color: #007bff; }
+/* Fim dos novos estilos de cabeçalho */
+
+/* Estilos de Card e Tabela (sem mudança) */
 .card { background-color: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
 .historico-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
 @media (max-width: 900px) { .historico-grid { grid-template-columns: 1fr; } }

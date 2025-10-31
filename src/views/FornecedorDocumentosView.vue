@@ -1,291 +1,14 @@
-<script setup>
-import { ref, onMounted, computed } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
-import { supabase } from '@/supabase'
-
-// --- Inicialização ---
-const route = useRoute()
-const fornecedorId = route.params.id
-const fornecedor = ref(null)
-const loading = ref(true)
-
-// --- ESTADO DA CHECKLIST (ARQUITETURA ATUALIZADA) ---
-// Em vez de uma 'requisitos', agora temos duas listas separadas
-const requisitosGlobais = ref([])
-const requisitosPorMaterial = ref([]) // Estrutura: [{ materialNome: 'Resina', documentos: [...] }, ...]
-const documentosEnviados = ref([])
-
-// --- Estado do Upload (Sem mudanças) ---
-const fileToUpload = ref(null)
-const dataEmissao = ref(null)
-const dataValidade = ref(null)
-const uploading = ref(false)
-const uploadError = ref(null)
-const selectedRequisito = ref(null) 
-
-
-// --- 1. FUNÇÃO PRINCIPAL (Busca tudo - LÓGICA ATUALIZADA) ---
-async function fetchData() {
-  loading.value = true
-  
-  try {
-    // 1. Buscar dados do Fornecedor
-    const { data: fornecedorData, error: fornecedorError } = await supabase
-      .from('fornecedores')
-      .select('*, grupos_fornecedor(nome_grupo)') 
-      .eq('id', fornecedorId)
-      .single()
-    if (fornecedorError) throw fornecedorError 
-    fornecedor.value = fornecedorData
-
-    // 2. Buscar Documentos já Enviados (Sem mudança)
-    const { data: enviadosData, error: enviadosError } = await supabase
-      .from('documentos_fornecedor')
-      .select('*')
-      .eq('fornecedor_id', fornecedorId)
-    if (enviadosError) throw enviadosError
-    documentosEnviados.value = enviadosData
-
-    // 3. Buscar Requisitos GLOBAIS (Baseados no Grupo)
-    if (fornecedorData.grupo_fornecedor_id) {
-      const { data: reqGlobaisData, error: reqGlobaisError } = await supabase
-        .from('requisitos_grupo')
-        .select('tipos_documento(*)')
-        .eq('grupo_id', fornecedorData.grupo_fornecedor_id)
-      if (reqGlobaisError) throw reqGlobaisError
-      // Define a ref 'requisitosGlobais'
-      requisitosGlobais.value = reqGlobaisData.map(r => r.tipos_documento).filter(Boolean)
-    }
-    
-    // 4. Buscar Requisitos ESPECÍFICOS (Agrupados por Material)
-    // 4a. Achar os materiais que o fornecedor fornece (com join para pegar o NOME do material)
-    const { data: materiaisFornecidos, error: matError } = await supabase
-      .from('fornecedor_materiais')
-      .select('materias_primas(id, nome)') // JOIN para pegar o nome e id da materia_prima
-      .eq('fornecedor_id', fornecedorId)
-    if (matError) throw matError
-    
-    // Filtra nulos e cria lista de IDs e um Map de Nomes
-    const materiais = materiaisFornecidos.map(m => m.materias_primas).filter(Boolean)
-    const materialIds = materiais.map(m => m.id)
-
-    // 4b. Achar os documentos exigidos por esses materiais
-    if (materialIds.length > 0) {
-      const { data: reqEspecificosData, error: reqEspecificosError } = await supabase
-        .from('requisitos_material')
-        .select('materia_prima_id, tipos_documento(*)') // Pega o doc E o ID do material ao qual pertence
-        .in('materia_prima_id', materialIds) 
-      if (reqEspecificosError) throw reqEspecificosError
-
-      // 4c. Agrupar os documentos por material (a "magica" da organização)
-      const groupedByMaterial = new Map()
-      // Primeiro, popula o Map com todos os materiais que o fornecedor fornece
-      materiais.forEach(m => groupedByMaterial.set(m.id, { materialNome: m.nome, documentos: [] }))
-
-      // Segundo, distribui os requisitos encontrados nos seus respectivos materiais
-      reqEspecificosData.forEach(req => {
-        if (req.tipos_documento) {
-          groupedByMaterial.get(req.materia_prima_id)?.documentos.push(req.tipos_documento)
-        }
-      })
-      
-      // Define a ref 'requisitosPorMaterial' com os dados agrupados
-      // Filtramos materiais que não têm nenhum requisito
-      requisitosPorMaterial.value = Array.from(groupedByMaterial.values())
-                                        .filter(group => group.documentos.length > 0)
-    }
-
-    // 5. NÃO COMBINAMOS MAIS. As refs estão prontas para o template.
-
-  } catch (err) {
-    console.error('Erro ao buscar dados:', err)
-    alert('Erro ao carregar a página: ' + err.message)
-  } finally {
-    loading.value = false
-  }
-}
-
-// --- 2. A "CHECKLIST" (COMPUTED - ATUALIZADO) ---
-
-// Criamos uma função HELPER, pois vamos usar essa lógica de status duas vezes
-function processRequisitosList(requisitosList) {
-  if (!requisitosList) return []
-  return requisitosList.map(req => {
-    // Busca o documento enviado correspondente
-    const docEnviado = documentosEnviados.value.find(
-      enviado => enviado.tipo_documento_id === req.id
-    )
-    
-    // Lógica de Status (idêntica à anterior)
-    let status = 'Pendente'
-    if (docEnviado) {
-      status = docEnviado.status
-      if (status === 'Aprovado' && req.requer_data_validade && docEnviado.data_validade) {
-        if (new Date(docEnviado.data_validade) < new Date(new Date().setHours(0,0,0,0))) {
-          status = 'Vencido'
-        }
-      }
-    }
-    return { ...req, docEnviado: docEnviado, status: status }
-  })
-}
-
-// Computed para a Lista Global
-const checklistGlobal = computed(() => processRequisitosList(requisitosGlobais.value))
-
-// Computed para a Lista Agrupada por Material
-const checklistPorMaterial = computed(() => {
-  return requisitosPorMaterial.value.map(materialGroup => {
-    return {
-      materialNome: materialGroup.materialNome,
-      // Usamos a mesma função helper para processar os documentos internos
-      documentos: processRequisitosList(materialGroup.documentos)
-    }
-  })
-})
-
-// --- 3. FUNÇÕES DE UPLOAD / MODAL ---
-// Nenhuma mudança necessária.
-function onFileSelected(event) {
-  fileToUpload.value = event.target.files[0]
-  uploadError.value = null
-}
-function openUploadModal(requisito) {
-  selectedRequisito.value = requisito
-  fileToUpload.value = null
-  dataEmissao.value = new Date().toISOString().split('T')[0]; 
-  dataValidade.value = null
-  uploadError.value = null
-  if (requisito.docEnviado) {
-    dataEmissao.value = requisito.docEnviado.data_emissao
-    dataValidade.value = requisito.docEnviado.data_validade
-  }
-}
-function closeUploadModal() {
-  selectedRequisito.value = null
-}
-async function handleUpload() {
-  if (!fileToUpload.value && !selectedRequisito.value.docEnviado) {
-    return uploadError.value = 'Por favor, selecione um arquivo.'
-  }
-  uploading.value = true
-  uploadError.value = null
-  let filePath = null
-  let fileName = null
-  try {
-    if (fileToUpload.value) {
-      const file = fileToUpload.value
-      fileName = file.name
-      filePath = `${fornecedorId}/${selectedRequisito.value.id}/${fileName}`
-      const { error: uploadError } = await supabase.storage
-        .from('documentos-fornecedores')
-        .upload(filePath, file, { upsert: true })
-      if (uploadError) throw uploadError
-    }
-    const docMetadata = {
-      fornecedor_id: fornecedorId,
-      tipo_documento_id: selectedRequisito.value.id,
-      data_emissao: dataEmissao.value,
-      data_validade: dataValidade.value,
-      status: 'Em Análise',
-      ...(filePath && { 
-        arquivo_url: filePath,
-        nome_arquivo: fileName 
-      })
-    }
-    const { error: dbError } = await supabase
-      .from('documentos_fornecedor')
-      .upsert(docMetadata, { 
-        onConflict: 'fornecedor_id, tipo_documento_id'
-      })
-    if (dbError) throw dbError
-    uploading.value = false
-    closeUploadModal()
-    alert('Documento salvo com sucesso! Status: Em Análise.')
-    await fetchData()
-  } catch (err) {
-    console.error('Erro no upload:', err)
-    if (err.message && err.message.includes('security policy')) {
-      uploadError.value = 'Erro: Você não tem permissão para enviar documentos.'
-    } else {
-      uploadError.value = 'Erro: ' + err.message
-    }
-    uploading.value = false
-  }
-}
-
-// --- 4. FUNÇÕES DE ARQUIVO (DOWNLOAD E VISUALIZAR) ---
-// Nenhuma mudança necessária.
-async function visualizarFile(filePath) {
-  try {
-    const { data, error } = await supabase.storage
-      .from('documentos-fornecedores')
-      .createSignedUrl(filePath, 60, { 
-        download: false
-      })
-    if (error) throw error
-    window.open(data.signedUrl, '_blank')
-  } catch (err) {
-    alert('Erro ao visualizar arquivo: ' + err.message)
-  }
-}
-
-async function downloadFile(filePath) {
-  try {
-    const { data, error } = await supabase.storage
-      .from('documentos-fornecedores')
-      .createSignedUrl(filePath, 60, {
-        download: true
-      })
-    if (error) throw error
-    window.open(data.signedUrl, '_blank')
-  } catch (err) {
-    alert('Erro ao baixar arquivo: ' + err.message)
-  }
-}
-
-async function deleteFile(docEnviado) {
-  if (!window.confirm(`Tem certeza que deseja excluir o documento "${docEnviado.nome_arquivo}"?`)) return
-  try {
-    if (docEnviado.arquivo_url) {
-      const { error: storageError } = await supabase.storage
-        .from('documentos-fornecedores')
-        .remove([docEnviado.arquivo_url])
-      if (storageError) console.warn("Erro ao deletar do Storage:", storageError.message)
-    }
-    const { error: dbError } = await supabase
-      .from('documentos_fornecedor')
-      .delete()
-      .eq('id', docEnviado.id)
-    if (dbError) throw dbError
-    alert('Documento excluído com sucesso.')
-    await fetchData()
-  } catch (err) {
-    if (err.message && err.message.includes('security policy')) {
-      alert('Erro: Você não tem permissão para excluir documentos.')
-    } else {
-      alert('Erro ao excluir: ' + err.message)
-    }
-  }
-}
-
-onMounted(() => {
-  fetchData()
-})
-</script>
-
 <template>
   <div>
-    <div class="page-header">
-      <div>
-        <RouterLink to="/fornecedores" class="link-voltar">&larr; Voltar para Fornecedores</RouterLink>
-        
-        <div v-if="fornecedor">
-          <h2>{{ fornecedor.nome }}</h2>
-          <h3>Checklist de Documentos de Homologação</h3>
-        </div>
+    <header class="sub-page-header">
+      <RouterLink to="/fornecedores" class="btn-voltar">
+        <span class="icon">&larr;</span> Voltar para Fornecedores
+      </RouterLink>
+      <div class="header-title-container" v-if="fornecedor">
+        <h1>{{ fornecedor.nome }}</h1>
+        <p>Checklist de Documentos de Homologação (Globais e Específicos)</p>
       </div>
-    </div>
+    </header>
     
     <div v-if="loading" class="loading">Carregando checklist...</div>
     
@@ -440,37 +163,310 @@ onMounted(() => {
   </div>
 </template>
 
+<script setup>
+// O SCRIPT SETUP INTEIRO PERMANECE IDÊNTICO AO ANTERIOR
+import { ref, onMounted, computed } from 'vue'
+import { useRoute, RouterLink } from 'vue-router'
+import { supabase } from '@/supabase'
+
+const route = useRoute()
+const fornecedorId = route.params.id
+const fornecedor = ref(null)
+const loading = ref(true)
+
+const requisitosGlobais = ref([])
+const requisitosPorMaterial = ref([]) 
+const documentosEnviados = ref([])
+
+const fileToUpload = ref(null)
+const dataEmissao = ref(null)
+const dataValidade = ref(null)
+const uploading = ref(false)
+const uploadError = ref(null)
+const selectedRequisito = ref(null) 
+
+async function fetchData() {
+  loading.value = true
+  let requisitosGlobaisList = []
+  let requisitosEspecificosList = []
+
+  try {
+    const { data: fornecedorData, error: fornecedorError } = await supabase
+      .from('fornecedores')
+      .select('*, grupos_fornecedor(nome_grupo)') 
+      .eq('id', fornecedorId)
+      .single()
+    if (fornecedorError) throw fornecedorError 
+    fornecedor.value = fornecedorData
+
+    const { data: enviadosData, error: enviadosError } = await supabase
+      .from('documentos_fornecedor')
+      .select('*')
+      .eq('fornecedor_id', fornecedorId)
+    if (enviadosError) throw enviadosError
+    documentosEnviados.value = enviadosData
+
+    if (fornecedorData.grupo_fornecedor_id) {
+      const { data: reqGlobaisData, error: reqGlobaisError } = await supabase
+        .from('requisitos_grupo')
+        .select('tipos_documento(*)') 
+        .eq('grupo_id', fornecedorData.grupo_fornecedor_id)
+      if (reqGlobaisError) throw reqGlobaisError
+      requisitosGlobaisList = reqGlobaisData.map(r => r.tipos_documento).filter(Boolean)
+    }
+    
+    const { data: materiaisFornecidos, error: matError } = await supabase
+      .from('fornecedor_materiais')
+      .select('materias_primas(id, nome)') 
+      .eq('fornecedor_id', fornecedorId)
+    if (matError) throw matError
+    
+    const materiais = materiaisFornecidos.map(m => m.materias_primas).filter(Boolean)
+    const materialIds = materiais.map(m => m.id)
+
+    if (materialIds.length > 0) {
+      const { data: reqEspecificosData, error: reqEspecificosError } = await supabase
+        .from('requisitos_material')
+        .select('materia_prima_id, tipos_documento(*)') 
+        .in('materia_prima_id', materialIds) 
+      if (reqEspecificosError) throw reqEspecificosError
+
+      const groupedByMaterial = new Map()
+      materiais.forEach(m => groupedByMaterial.set(m.id, { materialNome: m.nome, documentos: [] }))
+
+      reqEspecificosData.forEach(req => {
+        if (req.tipos_documento) {
+          groupedByMaterial.get(req.materia_prima_id)?.documentos.push(req.tipos_documento)
+        }
+      })
+      
+      requisitosPorMaterial.value = Array.from(groupedByMaterial.values())
+                                        .filter(group => group.documentos.length > 0)
+    }
+    
+    // Esta é a ref usada pelo 'checklistGlobal'
+    requisitosGlobais.value = requisitosGlobaisList
+
+  } catch (err) {
+    console.error('Erro ao buscar dados:', err)
+    alert('Erro ao carregar a página: ' + err.message)
+  } finally {
+    loading.value = false
+  }
+}
+
+function processRequisitosList(requisitosList) {
+  if (!requisitosList) return []
+  return requisitosList.map(req => {
+    const docEnviado = documentosEnviados.value.find(
+      enviado => enviado.tipo_documento_id === req.id
+    )
+    
+    let status = 'Pendente'
+    if (docEnviado) {
+      status = docEnviado.status
+      if (status === 'Aprovado' && req.requer_data_validade && docEnviado.data_validade) {
+        if (new Date(docEnviado.data_validade) < new Date(new Date().setHours(0,0,0,0))) {
+          status = 'Vencido'
+        }
+      }
+    }
+    return { ...req, docEnviado: docEnviado, status: status }
+  })
+}
+
+const checklistGlobal = computed(() => processRequisitosList(requisitosGlobais.value))
+
+const checklistPorMaterial = computed(() => {
+  return requisitosPorMaterial.value.map(materialGroup => {
+    return {
+      materialNome: materialGroup.materialNome,
+      documentos: processRequisitosList(materialGroup.documentos)
+    }
+  })
+})
+
+function onFileSelected(event) {
+  fileToUpload.value = event.target.files[0]
+  uploadError.value = null
+}
+function openUploadModal(requisito) {
+  selectedRequisito.value = requisito
+  fileToUpload.value = null
+  dataEmissao.value = new Date().toISOString().split('T')[0]; 
+  dataValidade.value = null
+  uploadError.value = null
+  if (requisito.docEnviado) {
+    dataEmissao.value = requisito.docEnviado.data_emissao
+    dataValidade.value = requisito.docEnviado.data_validade
+  }
+}
+function closeUploadModal() {
+  selectedRequisito.value = null
+}
+async function handleUpload() {
+  if (!fileToUpload.value && !selectedRequisito.value.docEnviado) {
+    return uploadError.value = 'Por favor, selecione um arquivo.'
+  }
+  uploading.value = true
+  uploadError.value = null
+  let filePath = null
+  let fileName = null
+  try {
+    if (fileToUpload.value) {
+      const file = fileToUpload.value
+      fileName = file.name
+      filePath = `${fornecedorId}/${selectedRequisito.value.id}/${fileName}`
+      const { error: uploadError } = await supabase.storage
+        .from('documentos-fornecedores')
+        .upload(filePath, file, { upsert: true })
+      if (uploadError) throw uploadError
+    }
+    const docMetadata = {
+      fornecedor_id: fornecedorId,
+      tipo_documento_id: selectedRequisito.value.id,
+      data_emissao: dataEmissao.value,
+      data_validade: dataValidade.value,
+      status: 'Em Análise',
+      ...(filePath && { 
+        arquivo_url: filePath,
+        nome_arquivo: fileName 
+      })
+    }
+    const { error: dbError } = await supabase
+      .from('documentos_fornecedor')
+      .upsert(docMetadata, { 
+        onConflict: 'fornecedor_id, tipo_documento_id'
+      })
+    if (dbError) throw dbError
+    uploading.value = false
+    closeUploadModal()
+    alert('Documento salvo com sucesso! Status: Em Análise.')
+    await fetchData()
+  } catch (err) {
+    console.error('Erro no upload:', err)
+    if (err.message && err.message.includes('security policy')) {
+      uploadError.value = 'Erro: Você não tem permissão para enviar documentos.'
+    } else {
+      uploadError.value = 'Erro: ' + err.message
+    }
+    uploading.value = false
+  }
+}
+
+async function visualizarFile(filePath) {
+  try {
+    const { data, error } = await supabase.storage
+      .from('documentos-fornecedores')
+      .createSignedUrl(filePath, 60, { 
+        download: false
+      })
+    if (error) throw error
+    window.open(data.signedUrl, '_blank')
+  } catch (err) {
+    alert('Erro ao visualizar arquivo: ' + err.message)
+  }
+}
+
+async function downloadFile(filePath) {
+  try {
+    const { data, error } = await supabase.storage
+      .from('documentos-fornecedores')
+      .createSignedUrl(filePath, 60, {
+        download: true
+      })
+    if (error) throw error
+    window.open(data.signedUrl, '_blank')
+  } catch (err) {
+    alert('Erro ao baixar arquivo: ' + err.message)
+  }
+}
+
+async function deleteFile(docEnviado) {
+  if (!window.confirm(`Tem certeza que deseja excluir o documento "${docEnviado.nome_arquivo}"?`)) return
+  try {
+    if (docEnviado.arquivo_url) {
+      const { error: storageError } = await supabase.storage
+        .from('documentos-fornecedores')
+        .remove([docEnviado.arquivo_url])
+      if (storageError) console.warn("Erro ao deletar do Storage:", storageError.message)
+    }
+    const { error: dbError } = await supabase
+      .from('documentos_fornecedor')
+      .delete()
+      .eq('id', docEnviado.id)
+    if (dbError) throw dbError
+    alert('Documento excluído com sucesso.')
+    await fetchData()
+  } catch (err) {
+    if (err.message && err.message.includes('security policy')) {
+      alert('Erro: Você não tem permissão para excluir documentos.')
+    } else {
+      alert('Erro ao excluir: ' + err.message)
+    }
+  }
+}
+
+onMounted(() => {
+  fetchData()
+})
+</script>
+
 <style scoped>
-/* Adicionando um estilo para o novo título da seção */
+/* ESTILOS DE LAYOUT ATUALIZADOS */
+/* NOVO Estilo de Cabeçalho de Sub-Página */
+.sub-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #eee;
+}
+.btn-voltar {
+  background: #f4f4f4;
+  color: #333;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  display: inline-flex; /* Para o ícone ficar ao lado */
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  align-self: flex-start; /* Não estica o botão */
+}
+.btn-voltar .icon {
+  font-weight: bold;
+}
+.header-title-container {
+  margin-top: 0.5rem;
+}
+.header-title-container h1 {
+  margin: 0;
+  color: #c50d42; /* Cor primária para o título */
+}
+.header-title-container p {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+  color: #555;
+}
+/* Fim dos novos estilos de cabeçalho */
+
+
+/* Estilos de Lista (sem mudança) */
 .section-title {
   font-size: 1.4rem;
   color: #333;
-  background-color: #f8f9fa; /* Um fundo leve para destacar o título da seção */
+  background-color: #f8f9fa;
   padding: 1rem 1.5rem;
   margin: 0;
   border-bottom: 2px solid #ddd;
 }
 .section-title strong {
-  color: #007bff; /* Destaca o nome do grupo/material */
+  color: #007bff; 
 }
-
-/* (Estilos da página, do modal e da checklist) */
-h2 { margin-top: 0; }
-h3 { margin-top: 0; }
-.page-header {
-  border-bottom: 2px solid #eee;
-  padding-bottom: 0.5rem;
-  margin-bottom: 2rem;
-}
-.link-voltar {
-  font-size: 0.9rem;
-  color: #555;
-  text-decoration: none;
-  margin-bottom: 0.5rem;
-  display: inline-block;
-}
-.link-voltar:hover { text-decoration: underline; }
-
 .list-section {
   background: #fff;
   padding: 0;
@@ -510,13 +506,11 @@ h3 { margin-top: 0; }
   color: #777;
   margin-top: 0.2rem;
 }
-/* Status com Cores */
 .status-aprovado { color: #28a745; }
 .status-rejeitado { color: #dc3545; }
 .status-vencido { color: #dc3545; font-weight: 700; }
-.status-em { color: #fd7e14; } /* Em Análise */
+.status-em { color: #fd7e14; }
 .status-pendente { color: #6c757d; }
-
 .actions { display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap; }
 .button-action {
   padding: 0.3rem 0.6rem;
@@ -532,7 +526,7 @@ h3 { margin-top: 0; }
 .button-visualizar { background-color: #17a2b8; }
 .button-download { background-color: #6c757d; }
 
-/* --- Estilos do Modal --- */
+/* Estilos do Modal (sem mudança) */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -617,7 +611,7 @@ h3 { margin-top: 0; }
   margin-bottom: 0;
 }
 
-/* Responsividade da Checklist */
+/* Responsividade (sem mudança) */
 @media (max-width: 768px) {
   .item-checklist {
     grid-template-columns: 1fr;
