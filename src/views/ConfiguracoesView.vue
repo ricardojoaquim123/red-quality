@@ -2,6 +2,10 @@
 import { ref, onMounted, computed } from 'vue'
 import { supabase } from '@/supabase'
 
+// --- NOVO ESTADO DE UI ---
+// Controla qual aba está visível. Começa em 'grupos'.
+const activeTab = ref('grupos')
+
 // --- ESTADO PARA "GRUPOS DE FORNECEDOR" ---
 const grupos = ref([])
 const novoGrupoNome = ref('')
@@ -13,14 +17,14 @@ const novoTipoDocNome = ref('')
 const novoTipoDocValidade = ref(true)
 const loadingTiposDoc = ref(false)
 
-// --- NOVO ESTADO: "CATEGORIAS DE MATERIAIS" ---
+// --- ESTADO: "CATEGORIAS DE MATERIAIS" ---
 const categorias = ref([])
 const novaCategoriaNome = ref('')
 const loadingCategorias = ref(false)
 
 // --- ESTADO PARA A "MATRIZ" ---
-const selectedGrupo = ref(null)
-const requisitosDoGrupo = ref([])
+const selectedGrupo = ref(null) 
+const requisitosDoGrupo = ref([]) 
 const loadingRequisitos = ref(false)
 
 // --- FUNÇÕES "GRUPOS DE FORNECEDOR" (Sem mudança) ---
@@ -88,7 +92,7 @@ async function deleteTipoDocumento(id) {
   }
 }
 
-// --- NOVAS FUNÇÕES: "CATEGORIAS DE MATERIAIS" ---
+// --- FUNÇÕES: "CATEGORIAS DE MATERIAIS" (Sem mudança) ---
 async function fetchCategorias() {
   loadingCategorias.value = true
   try {
@@ -114,7 +118,6 @@ async function deleteCategoria(id, nome) {
     if (error) throw error
     categorias.value = categorias.value.filter(c => c.id !== id)
   } catch (err) {
-    // ESTA É A LINHA CORRIGIDA
     alert('Erro ao deletar categoria: ' + err.message)
   }
 }
@@ -183,11 +186,11 @@ const documentosDisponiveis = computed(() => {
 })
 
 
-// --- ON MOUNTED (Atualizado) ---
+// --- ON MOUNTED (Sem mudança) ---
 onMounted(() => {
   fetchGrupos()
   fetchTiposDocumento()
-  fetchCategorias() // <- Adicionado
+  fetchCategorias() 
 })
 </script>
 
@@ -198,8 +201,28 @@ onMounted(() => {
       <p>Gerencie os blocos de construção do sistema: Grupos, Tipos de Documento e Categorias de Material.</p>
     </header>
     
-    <div class="config-grid">
-      
+    <div class="config-tabs">
+      <button 
+        :class="['tab-button', { active: activeTab === 'grupos' }]"
+        @click="activeTab = 'grupos'"
+      >
+        Grupos & Matriz
+      </button>
+      <button 
+        :class="['tab-button', { active: activeTab === 'tiposDoc' }]"
+        @click="activeTab = 'tiposDoc'"
+      >
+        Tipos de Documento
+      </button>
+      <button 
+        :class="['tab-button', { active: activeTab === 'categorias' }]"
+        @click="activeTab = 'categorias'"
+      >
+        Categorias de Material
+      </button>
+    </div>
+
+    <div v-if="activeTab === 'grupos'" class="tab-content">
       <section class="config-section">
         <h3>Etapa 1: Grupos de Fornecedor</h3>
         <p>Define os "Globais". Ex: Matéria-Prima, Serviços.</p>
@@ -222,9 +245,41 @@ onMounted(() => {
         </ul>
         <p v-if="!loadingGrupos" class="hint">Clique em um grupo para definir os requisitos.</p>
       </section>
-      
+
+      <section v-if="selectedGrupo" class="matriz-section">
+        <h3>Etapa 2: Definir Requisitos para o Grupo: <span class="grupo-selecionado">{{ selectedGrupo.nome_grupo }}</span></h3>
+        
+        <div v-if="loadingRequisitos" class="loading">Carregando requisitos...</div>
+        
+        <div v-else class="container-split">
+          <div class="matriz-coluna">
+            <h4>Documentos Requeridos ({{ documentosRequeridos.length }})</h4>
+            <ul class="item-list">
+              <li v-for="doc in documentosRequeridos" :key="doc.id" class="matriz-item">
+                <span>{{ doc.nome_documento }}</span>
+                <button @click="removeRequisito(doc.id)" class="button-action button-remove">Remover</button>
+              </li>
+              <li v-if="documentosRequeridos.length === 0" class="empty-list">Nenhum documento requerido.</li>
+            </ul>
+          </div>
+          
+          <div class="matriz-coluna">
+            <h4>Documentos Disponíveis ({{ documentosDisponiveis.length }})</h4>
+            <ul class="item-list">
+              <li v-for="doc in documentosDisponiveis" :key="doc.id" class="matriz-item">
+                <span>{{ doc.nome_documento }}</span>
+                <button @click="addRequisito(doc.id)" class="button-action button-add">Adicionar</button>
+              </li>
+              <li v-if="documentosDisponiveis.length === 0" class="empty-list">Nenhum documento disponível.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="activeTab === 'tiposDoc'" class="tab-content">
       <section class="config-section">
-        <h3>Etapa 2: Tipos de Documento</h3>
+        <h3>Gerenciar Tipos de Documento</h3>
         <p>Catálogo mestre de todos os documentos solicitados.</p>
         <form @submit.prevent="handleNovoTipoDocumento" class="form-inline-stacked">
           <input type="text" v-model="novoTipoDocNome" placeholder="Nome do novo documento (ex: ISO 9001)" required />
@@ -246,9 +301,11 @@ onMounted(() => {
           </li>
         </ul>
       </section>
+    </div>
 
+    <div v-if="activeTab === 'categorias'" class="tab-content">
       <section class="config-section">
-        <h3>Etapa 3: Categorias de Material</h3>
+        <h3>Gerenciar Categorias de Material</h3>
         <p>Agrupamentos para materiais. Ex: Resinas, EPIs.</p>
         <form @submit.prevent="handleNovaCategoria" class="form-inline">
           <input type="text" v-model="novaCategoriaNome" placeholder="Nome da nova categoria" required />
@@ -264,38 +321,7 @@ onMounted(() => {
           <li v-if="categorias.length === 0" class="empty-list">Nenhuma categoria criada.</li>
         </ul>
       </section>
-
     </div>
-    
-    <section v-if="selectedGrupo" class="matriz-section">
-      <h3>Etapa 4: Definir Requisitos para o Grupo: <span class="grupo-selecionado">{{ selectedGrupo.nome_grupo }}</span></h3>
-      
-      <div v-if="loadingRequisitos" class="loading">Carregando requisitos...</div>
-      
-      <div v-else class="container-split">
-        <div class="matriz-coluna">
-          <h4>Documentos Requeridos ({{ documentosRequeridos.length }})</h4>
-          <ul class="item-list">
-            <li v-for="doc in documentosRequeridos" :key="doc.id" class="matriz-item">
-              <span>{{ doc.nome_documento }}</span>
-              <button @click="removeRequisito(doc.id)" class="button-action button-remove">Remover</button>
-            </li>
-            <li v-if="documentosRequeridos.length === 0" class="empty-list">Nenhum documento requerido.</li>
-          </ul>
-        </div>
-        
-        <div class="matriz-coluna">
-          <h4>Documentos Disponíveis ({{ documentosDisponiveis.length }})</h4>
-          <ul class="item-list">
-            <li v-for="doc in documentosDisponiveis" :key="doc.id" class="matriz-item">
-              <span>{{ doc.nome_documento }}</span>
-              <button @click="addRequisito(doc.id)" class="button-action button-add">Adicionar</button>
-            </li>
-            <li v-if="documentosDisponiveis.length === 0" class="empty-list">Nenhum documento disponível.</li>
-          </ul>
-        </div>
-      </div>
-    </section>
 
   </div>
 </template>
@@ -317,20 +343,40 @@ onMounted(() => {
   margin: 0;
 }
 
-/* ATUALIZADO: Grid para 3 colunas */
-.config-grid {
-  display: grid;
-  grid-template-columns: 1fr; /* Padrão Móvel */
-  gap: 2rem;
-  margin-bottom: 2rem; /* Espaço antes da seção da matriz */
+/* --- NOVA ARQUITETURA DE ABAS --- */
+.config-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #eee;
 }
-@media (min-width: 1024px) {
-  .config-grid {
-    grid-template-columns: 1fr 1fr 1fr; /* 3 colunas em Desktop */
-  }
+.tab-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  background-color: transparent;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+.tab-button:hover {
+  background-color: #f8f9fa;
+  color: #000;
+}
+.tab-button.active {
+  color: #007bff;
+  border-bottom-color: #007bff;
 }
 
-/* Grid da Matriz (Sem mudança) */
+.tab-content {
+  /* O conteúdo da aba ativa */
+}
+/* --- FIM DA ARQUITETURA DE ABAS --- */
+
+
+/* Layout da Matriz (2 colunas) */
 .container-split {
   display: grid;
   grid-template-columns: 1fr; 
@@ -345,7 +391,7 @@ onMounted(() => {
 
 .config-section {
   background: #fff;
-  padding: 1.5rem; /* Reduzido o padding para caber melhor */
+  padding: 1.5rem;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
@@ -359,7 +405,7 @@ onMounted(() => {
 .form-inline-stacked { flex-direction: column; gap: 1rem; }
 .form-inline input[type="text"], .form-inline-stacked input[type="text"] {
   flex-grow: 1;
-  min-width: 120px; /* Reduzido min-width */
+  min-width: 120px; 
   padding: 0.75rem 1rem;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -421,7 +467,7 @@ onMounted(() => {
   cursor: pointer;
   font-weight: 600;
   line-height: 20px;
-  flex-shrink: 0; /* Impede que o botão encolha */
+  flex-shrink: 0; 
 }
 .item-list li.selected .button-delete-tiny {
   background-color: white;
@@ -447,7 +493,7 @@ onMounted(() => {
 }
 .matriz-item span {
   flex-grow: 1;
-  word-break: break-word; /* Quebra nomes longos */
+  word-break: break-word; 
 }
 .button-action {
   padding: 0.3rem 0.6rem;
@@ -456,7 +502,7 @@ onMounted(() => {
   color: white;
   cursor: pointer;
   font-size: 0.9rem;
-  margin-left: 0.5rem; /* Adiciona espaço */
+  margin-left: 0.5rem; 
 }
 .button-add {
   background-color: #28a745; /* Verde */
