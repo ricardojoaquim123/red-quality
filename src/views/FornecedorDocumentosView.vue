@@ -2,8 +2,6 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { supabase } from '@/supabase'
-// NOTA: Não precisamos mais do authStore aqui, pois todos os botões
-// (Upload, Delete, Visualizar, Download) são para todos os usuários.
 
 // --- Inicialização ---
 const route = useRoute()
@@ -11,11 +9,13 @@ const fornecedorId = route.params.id
 const fornecedor = ref(null)
 const loading = ref(true)
 
-// --- Estado da Checklist ---
-const requisitos = ref([]) // Esta ref agora receberá a lista COMBINADA
+// --- ESTADO DA CHECKLIST (ARQUITETURA ATUALIZADA) ---
+// Em vez de uma 'requisitos', agora temos duas listas separadas
+const requisitosGlobais = ref([])
+const requisitosPorMaterial = ref([]) // Estrutura: [{ materialNome: 'Resina', documentos: [...] }, ...]
 const documentosEnviados = ref([])
 
-// --- Estado do Upload (para o Modal) ---
+// --- Estado do Upload (Sem mudanças) ---
 const fileToUpload = ref(null)
 const dataEmissao = ref(null)
 const dataValidade = ref(null)
@@ -24,13 +24,10 @@ const uploadError = ref(null)
 const selectedRequisito = ref(null) 
 
 
-// --- 1. FUNÇÃO PRINCIPAL (Busca tudo) ---
-// ARQUITETURA ATUALIZADA: Esta função agora busca requisitos do Grupo E dos Materiais.
+// --- 1. FUNÇÃO PRINCIPAL (Busca tudo - LÓGICA ATUALIZADA) ---
 async function fetchData() {
   loading.value = true
-  let requisitosGlobais = []
-  let requisitosEspecificos = []
-
+  
   try {
     // 1. Buscar dados do Fornecedor
     const { data: fornecedorData, error: fornecedorError } = await supabase
@@ -41,7 +38,7 @@ async function fetchData() {
     if (fornecedorError) throw fornecedorError 
     fornecedor.value = fornecedorData
 
-    // 2. Buscar Documentos já Enviados
+    // 2. Buscar Documentos já Enviados (Sem mudança)
     const { data: enviadosData, error: enviadosError } = await supabase
       .from('documentos_fornecedor')
       .select('*')
@@ -53,49 +50,52 @@ async function fetchData() {
     if (fornecedorData.grupo_fornecedor_id) {
       const { data: reqGlobaisData, error: reqGlobaisError } = await supabase
         .from('requisitos_grupo')
-        .select('tipos_documento(*)') // Faz o join com a tabela de tipos_documento
+        .select('tipos_documento(*)')
         .eq('grupo_id', fornecedorData.grupo_fornecedor_id)
       if (reqGlobaisError) throw reqGlobaisError
-      // Mapeia para uma lista de objetos 'tipos_documento'
-      requisitosGlobais = reqGlobaisData.map(r => r.tipos_documento).filter(Boolean) // .filter(Boolean) remove nulos
+      // Define a ref 'requisitosGlobais'
+      requisitosGlobais.value = reqGlobaisData.map(r => r.tipos_documento).filter(Boolean)
     }
     
-    // 4. Buscar Requisitos ESPECÍFICOS (Baseados nos Materiais)
-    // 4a. Achar os materiais que o fornecedor fornece
+    // 4. Buscar Requisitos ESPECÍFICOS (Agrupados por Material)
+    // 4a. Achar os materiais que o fornecedor fornece (com join para pegar o NOME do material)
     const { data: materiaisFornecidos, error: matError } = await supabase
       .from('fornecedor_materiais')
-      .select('materia_prima_id')
+      .select('materias_primas(id, nome)') // JOIN para pegar o nome e id da materia_prima
       .eq('fornecedor_id', fornecedorId)
     if (matError) throw matError
     
-    const materialIds = materiaisFornecidos.map(m => m.materia_prima_id)
+    // Filtra nulos e cria lista de IDs e um Map de Nomes
+    const materiais = materiaisFornecidos.map(m => m.materias_primas).filter(Boolean)
+    const materialIds = materiais.map(m => m.id)
 
     // 4b. Achar os documentos exigidos por esses materiais
     if (materialIds.length > 0) {
       const { data: reqEspecificosData, error: reqEspecificosError } = await supabase
         .from('requisitos_material')
-        .select('tipos_documento(*)') // Faz o join com a tabela de tipos_documento
-        .in('materia_prima_id', materialIds) // Onde o material_id está na lista que encontramos
+        .select('materia_prima_id, tipos_documento(*)') // Pega o doc E o ID do material ao qual pertence
+        .in('materia_prima_id', materialIds) 
       if (reqEspecificosError) throw reqEspecificosError
-      // Mapeia para uma lista de objetos 'tipos_documento'
-      requisitosEspecificos = reqEspecificosData.map(r => r.tipos_documento).filter(Boolean)
+
+      // 4c. Agrupar os documentos por material (a "magica" da organização)
+      const groupedByMaterial = new Map()
+      // Primeiro, popula o Map com todos os materiais que o fornecedor fornece
+      materiais.forEach(m => groupedByMaterial.set(m.id, { materialNome: m.nome, documentos: [] }))
+
+      // Segundo, distribui os requisitos encontrados nos seus respectivos materiais
+      reqEspecificosData.forEach(req => {
+        if (req.tipos_documento) {
+          groupedByMaterial.get(req.materia_prima_id)?.documentos.push(req.tipos_documento)
+        }
+      })
+      
+      // Define a ref 'requisitosPorMaterial' com os dados agrupados
+      // Filtramos materiais que não têm nenhum requisito
+      requisitosPorMaterial.value = Array.from(groupedByMaterial.values())
+                                        .filter(group => group.documentos.length > 0)
     }
 
-    // 5. Combinar e Deduplicar as duas listas
-    const todosRequisitosMap = new Map()
-    
-    // Adiciona globais
-    requisitosGlobais.forEach(doc => {
-      todosRequisitosMap.set(doc.id, doc)
-    })
-    
-    // Adiciona específicos (se já existir, será substituído, o que é ok)
-    requisitosEspecificos.forEach(doc => {
-      todosRequisitosMap.set(doc.id, doc)
-    })
-
-    // Define o estado final 'requisitos' com a lista combinada e única
-    requisitos.value = Array.from(todosRequisitosMap.values())
+    // 5. NÃO COMBINAMOS MAIS. As refs estão prontas para o template.
 
   } catch (err) {
     console.error('Erro ao buscar dados:', err)
@@ -105,15 +105,18 @@ async function fetchData() {
   }
 }
 
-// --- 2. A "CHECKLIST" (computed) ---
-// Esta função NÃO PRECISA DE MUDANÇAS. Ela continuará funcionando
-// perfeitamente com a lista 'requisitos' combinada.
-const checklist = computed(() => {
-  if (!requisitos.value) return []
-  return requisitos.value.map(req => {
+// --- 2. A "CHECKLIST" (COMPUTED - ATUALIZADO) ---
+
+// Criamos uma função HELPER, pois vamos usar essa lógica de status duas vezes
+function processRequisitosList(requisitosList) {
+  if (!requisitosList) return []
+  return requisitosList.map(req => {
+    // Busca o documento enviado correspondente
     const docEnviado = documentosEnviados.value.find(
       enviado => enviado.tipo_documento_id === req.id
     )
+    
+    // Lógica de Status (idêntica à anterior)
     let status = 'Pendente'
     if (docEnviado) {
       status = docEnviado.status
@@ -125,10 +128,24 @@ const checklist = computed(() => {
     }
     return { ...req, docEnviado: docEnviado, status: status }
   })
+}
+
+// Computed para a Lista Global
+const checklistGlobal = computed(() => processRequisitosList(requisitosGlobais.value))
+
+// Computed para a Lista Agrupada por Material
+const checklistPorMaterial = computed(() => {
+  return requisitosPorMaterial.value.map(materialGroup => {
+    return {
+      materialNome: materialGroup.materialNome,
+      // Usamos a mesma função helper para processar os documentos internos
+      documentos: processRequisitosList(materialGroup.documentos)
+    }
+  })
 })
 
 // --- 3. FUNÇÕES DE UPLOAD / MODAL ---
-// Nenhuma mudança necessária aqui.
+// Nenhuma mudança necessária.
 function onFileSelected(event) {
   fileToUpload.value = event.target.files[0]
   uploadError.value = null
@@ -198,14 +215,13 @@ async function handleUpload() {
 }
 
 // --- 4. FUNÇÕES DE ARQUIVO (DOWNLOAD E VISUALIZAR) ---
-// Nenhuma mudança necessária aqui.
-
+// Nenhuma mudança necessária.
 async function visualizarFile(filePath) {
   try {
     const { data, error } = await supabase.storage
       .from('documentos-fornecedores')
       .createSignedUrl(filePath, 60, { 
-        download: false // <-- A MÁGICA: Diz ao browser para "visualizar" (inline)
+        download: false
       })
     if (error) throw error
     window.open(data.signedUrl, '_blank')
@@ -219,7 +235,7 @@ async function downloadFile(filePath) {
     const { data, error } = await supabase.storage
       .from('documentos-fornecedores')
       .createSignedUrl(filePath, 60, {
-        download: true // <-- Diz ao browser para "baixar" (attachment)
+        download: true
       })
     if (error) throw error
     window.open(data.signedUrl, '_blank')
@@ -266,71 +282,104 @@ onMounted(() => {
         
         <div v-if="fornecedor">
           <h2>{{ fornecedor.nome }}</h2>
-          <h3>
-            Checklist de Documentos (Grupo: <strong>{{ fornecedor.grupos_fornecedor?.nome_grupo || 'Nenhum' }}</strong>)
-          </h3>
+          <h3>Checklist de Documentos de Homologação</h3>
         </div>
       </div>
     </div>
     
     <div v-if="loading" class="loading">Carregando checklist...</div>
     
-      <div v-else-if="requisitos.length === 0" class="empty-list">
+    <div v-else-if="checklistGlobal.length === 0 && checklistPorMaterial.length === 0" class="empty-list">
       <p>Este fornecedor não possui nenhum documento requerido (nem por Grupo, nem por Material).</p>
       <p>
-        Vá até <RouterLink to="/configuracoes">Configurações</RouterLink> ou 
-        <RouterLink to="/admin/materiais">Admin de Materiais</RouterLink> 
+        Vá até <RouterLink to="/configuracoes">Configurações</RouterLink> (para requisitos de grupo) ou 
+        <RouterLink to="/admin/materiais">Admin de Materiais</RouterLink> (para requisitos de material)
         para definir os requisitos.
       </p>
     </div>
 
-    <section v-else class="list-section">
-      <ul class="item-list">
-        <li class="item-checklist header-list">
-          <span>Documento Requerido</span>
-          <span>Status</span>
-          <span>Validade</span>
-          <span class="actions">Ações</span>
-        </li>
-        <li v-for="item in checklist" :key="item.id" class="item-checklist">
-          <span>
-            <strong>{{ item.nome_documento }}</strong>
-            <small v-if="item.docEnviado">{{ item.docEnviado.nome_arquivo }}</small>
-          </span>
-          <span>
-            <strong :class="`status-${item.status.toLowerCase().split(' ')[0]}`">
-              {{ item.status }}
-            </strong>
-          </span>
-          <span>{{ item.docEnviado?.data_validade || '--' }}</span>
-          <span class="actions">
-            
-            <button 
-              @click="openUploadModal(item)" 
-              class="button-action button-upload"
-            >
-              {{ item.docEnviado ? 'Atualizar' : 'Enviar' }}
-            </button>
-            
-            <button 
-              v-if="item.docEnviado"
-              @click="visualizarFile(item.docEnviado.arquivo_url)" 
-              class="button-action button-visualizar"
-            >
-              Visualizar
-            </button>
+    <div v-else>
+      
+      <section class="list-section" v-if="checklistGlobal.length > 0">
+        <h2 class="section-title">
+          Requisitos Globais (Grupo: <strong>{{ fornecedor.grupos_fornecedor?.nome_grupo || 'N/A' }}</strong>)
+        </h2>
+        <ul class="item-list">
+          <li class="item-checklist header-list">
+            <span>Documento Requerido</span>
+            <span>Status</span>
+            <span>Validade</span>
+            <span class="actions">Ações</span>
+          </li>
+          <li v-for="item in checklistGlobal" :key="item.id" class="item-checklist">
+            <span>
+              <strong>{{ item.nome_documento }}</strong>
+              <small v-if="item.docEnviado">{{ item.docEnviado.nome_arquivo }}</small>
+            </span>
+            <span>
+              <strong :class="`status-${item.status.toLowerCase().split(' ')[0]}`">
+                {{ item.status }}
+              </strong>
+            </span>
+            <span>{{ item.docEnviado?.data_validade || '--' }}</span>
+            <span class="actions">
+              <button @click="openUploadModal(item)" class="button-action button-upload">
+                {{ item.docEnviado ? 'Atualizar' : 'Enviar' }}
+              </button>
+              <button v-if="item.docEnviado" @click="visualizarFile(item.docEnviado.arquivo_url)" class="button-action button-visualizar">
+                Visualizar
+              </button>
+              <button v-if="item.docEnviado" @click="downloadFile(item.docEnviado.arquivo_url)" class="button-action button-download">
+                Baixar
+              </button>
+            </span>
+          </li>
+        </ul>
+      </section>
 
-            <button 
-              v-if="item.docEnviado" 
-              @click="downloadFile(item.docEnviado.arquivo_url)" 
-              class="button-action button-download"
-            >
-              Baixar
-            </button>
-          </span>
-        </li>
-      </ul>
-    </section>
+      <section 
+        class="list-section" 
+        v-for="material in checklistPorMaterial" 
+        :key="material.materialNome" 
+        style="margin-top: 2rem;"
+      >
+        <h2 class="section-title">
+          Requisitos Específicos (Material: <strong>{{ material.materialNome }}</strong>)
+        </h2>
+        <ul class="item-list">
+          <li class="item-checklist header-list">
+            <span>Documento Requerido</span>
+            <span>Status</span>
+            <span>Validade</span>
+            <span class="actions">Ações</span>
+          </li>
+          <li v-for="item in material.documentos" :key="item.id" class="item-checklist">
+            <span>
+              <strong>{{ item.nome_documento }}</strong>
+              <small v-if="item.docEnviado">{{ item.docEnviado.nome_arquivo }}</small>
+            </span>
+            <span>
+              <strong :class="`status-${item.status.toLowerCase().split(' ')[0]}`">
+                {{ item.status }}
+              </strong>
+            </span>
+            <span>{{ item.docEnviado?.data_validade || '--' }}</span>
+            <span class="actions">
+              <button @click="openUploadModal(item)" class="button-action button-upload">
+                {{ item.docEnviado ? 'Atualizar' : 'Enviar' }}
+              </button>
+              <button v-if="item.docEnviado" @click="visualizarFile(item.docEnviado.arquivo_url)" class="button-action button-visualizar">
+                Visualizar
+              </button>
+              <button v-if="item.docEnviado" @click="downloadFile(item.docEnviado.arquivo_url)" class="button-action button-download">
+                Baixar
+              </button>
+            </span>
+          </li>
+        </ul>
+      </section>
+
+    </div>
     
     <div v-if="selectedRequisito" class="modal-overlay" @click.self="closeUploadModal">
       <div class="modal-content">
@@ -392,6 +441,19 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Adicionando um estilo para o novo título da seção */
+.section-title {
+  font-size: 1.4rem;
+  color: #333;
+  background-color: #f8f9fa; /* Um fundo leve para destacar o título da seção */
+  padding: 1rem 1.5rem;
+  margin: 0;
+  border-bottom: 2px solid #ddd;
+}
+.section-title strong {
+  color: #007bff; /* Destaca o nome do grupo/material */
+}
+
 /* (Estilos da página, do modal e da checklist) */
 h2 { margin-top: 0; }
 h3 { margin-top: 0; }
@@ -467,7 +529,7 @@ h3 { margin-top: 0; }
   white-space: nowrap;
 }
 .button-upload { background-color: #007bff; }
-.button-visualizar { background-color: #17a2b8; } /* Ciano (Cor nova) */
+.button-visualizar { background-color: #17a2b8; }
 .button-download { background-color: #6c757d; }
 
 /* --- Estilos do Modal --- */
