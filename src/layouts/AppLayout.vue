@@ -29,11 +29,11 @@ async function handleLogout() {
         <RouterLink to="/fornecedores" class="nav-link">Fornecedores</RouterLink>
         
         <RouterLink to="/metricas" class="nav-link">Monitoramento de Serviços</RouterLink>
-        
         <RouterLink to="/score" class="nav-link">Score Fornecedores</RouterLink>
 
         <template v-if="authStore.isAdmin">
           <RouterLink to="/configuracoes" class="nav-link">Configurações</RouterLink>
+          <RouterLink to="/admin/materiais" class="nav-link nav-link-admin">Gerenciar Materiais</RouterLink>
         </template>
       </nav>
       
@@ -85,6 +85,11 @@ async function handleLogout() {
   font-weight: 600;
   padding: 0.5rem;
   border-radius: 4px;
+}
+.nav-link-admin {
+    /* Destaca que este link é de administração */
+    color: #007bff; 
+    border: 1px solid #cce5ff;
 }
 .nav-link:hover { background-color: #f0f0f0; }
 .nav-link.router-link-exact-active { 

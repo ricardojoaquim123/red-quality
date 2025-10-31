@@ -25,8 +25,9 @@ const router = createRouter({
         { path: '/fornecedores/:id/documentos', name: 'fornecedor-documentos', component: () => import('../views/FornecedorDocumentosView.vue') },
         { path: '/metricas', name: 'monitoramento', component: () => import('../views/MetricasView.vue') },
         { path: '/score', name: 'score-dashboard', component: () => import('../views/ScoreView.vue') },
+        { path: '/score/historico/:id', name: 'score-historico', component: () => import('../views/ScoreHistoricoView.vue') },
         
-        { path: '/score/historico/:id', name: 'score-historico', component: () => import('../views/ScoreHistoricoView.vue') },
+                { path: '/admin/materiais', name: 'admin-materiais', component: () => import('../views/AdminMateriaisView.vue') },
       ]
     }
   ]
@@ -44,14 +45,17 @@ router.beforeEach(async (to, from, next) => {
   const requiresAuth = to.meta.requiresAuth
   const isAdmin = authStore.isAdmin 
 
-  if (to.name === 'configuracoes' && !isAdmin) {
-    console.log('Guarda: Acesso de Admin (Configurações) negado. Indo para /dashboard.')
+  // Proteção contra Admin (Configurações e Materiais)
+  if ((to.name === 'configuracoes' || to.name === 'admin-materiais') && !isAdmin) {
+    console.log('Guarda: Acesso de Admin negado. Indo para /dashboard.')
     next({ name: 'dashboard' }) 
   }
+  // Rota protegida, usuário deslogado
   else if (requiresAuth && !isLoggedIn) {
     console.log('Guarda: Acesso negado. Indo para /login.')
     next({ name: 'login' })
   } 
+  // Rota de login, usuário logado
   else if (to.name === 'login' && isLoggedIn) {
     console.log('Guarda: Usuário já logado. Indo para /dashboard.')
     next({ name: 'dashboard' })
