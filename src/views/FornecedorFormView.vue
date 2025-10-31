@@ -16,86 +16,103 @@
 
     <form v-else @submit.prevent="handleSave" class="card form-container">
       
-      <section class="section-group">
-        <h2>Dados Fundamentais</h2>
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="nome">Nome/Razão Social</label>
-            <input type="text" id="nome" v-model="form.nome" required>
-          </div>
-          <div class="form-group">
-            <label for="cnpj">CNPJ/ID Fiscal</label>
-            <input type="text" id="cnpj" v-model="form.cnpj_id_fiscal" required>
-          </div>
-          <div class="form-group">
-            <label for="contato">Contato Principal</label>
-            <input type="text" id="contato" v-model="form.contato">
-          </div>
-          <div class="form-group">
-            <label for="grupo">Grupo de Fornecedor</label>
-            <select id="grupo" v-model="form.grupo_fornecedor_id" required>
-              <option value="" disabled>Selecione o Grupo</option>
-              <option v-for="grupo in grupos" :key="grupo.id" :value="grupo.id">{{ grupo.nome_grupo }}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="escopo">Escopo de Fornecimento</label>
-            <input type="text" id="escopo" v-model="form.escopo_fornecimento">
-          </div>
-          <div class="form-group">
-            <label for="status_homologacao">Status de Homologação</label>
-            <select id="status_homologacao" v-model="form.status_homologacao" required>
-              <option value="Em Avaliação">Em Avaliação</option>
-              <option value="Aprovado">Aprovado</option>
-              <option value="Aprovado com Restrições">Aprovado com Restrições</option>
-              <option value="Reprovado">Reprovado</option>
-              <option value="Inativo">Inativo</option>
-            </select>
-          </div>
-        </div>
-      </section>
-      
-      <section class="section-group">
-        <h2>Materiais/Serviços Fornecidos</h2>
-        <p class="instrucao">Selecione todos os materiais ou serviços que este fornecedor pode fornecer. Isso definirá os requisitos de documentação específicos.</p>
+      <div class="config-tabs">
+        <button 
+          type="button"
+          :class="['tab-button', { active: activeTab === 'dados' }]"
+          @click="activeTab = 'dados'"
+        >
+          Dados Fundamentais
+        </button>
+        <button 
+          type="button"
+          :class="['tab-button', { active: activeTab === 'materiais' }]"
+          @click="activeTab = 'materiais'"
+        >
+          Materiais/Serviços Fornecidos
+        </button>
+      </div>
+
+      <div class="tab-content">
         
-        <div class="form-group-filter">
-          <label for="filtroBuscaMat">Buscar Material</label>
-          <input 
-            type="search" 
-            id="filtroBuscaMat" 
-            v-model="filtroBusca" 
-            placeholder="Filtrar por nome ou código..."
-          >
-        </div>
+        <section v-if="activeTab === 'dados'" class="section-group">
+          <h2>Dados Fundamentais</h2>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="nome">Nome/Razão Social</label>
+              <input type="text" id="nome" v-model="form.nome" required>
+            </div>
+            <div class="form-group">
+              <label for="cnpj">CNPJ/ID Fiscal</label>
+              <input type="text" id="cnpj" v-model="form.cnpj_id_fiscal" required>
+            </div>
+            <div class="form-group">
+              <label for="contato">Contato Principal</label>
+              <input type="text" id="contato" v-model="form.contato">
+            </div>
+            <div class="form-group">
+              <label for="grupo">Grupo de Fornecedor</label>
+              <select id="grupo" v-model="form.grupo_fornecedor_id" required>
+                <option value="" disabled>Selecione o Grupo</option>
+                <option v-for="grupo in grupos" :key="grupo.id" :value="grupo.id">{{ grupo.nome_grupo }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="escopo">Escopo de Fornecimento</label>
+              <input type="text" id="escopo" v-model="form.escopo_fornecimento">
+            </div>
+            <div class="form-group">
+              <label for="status_homologacao">Status de Homologação</label>
+              <select id="status_homologacao" v-model="form.status_homologacao" required>
+                <option value="Em Avaliação">Em Avaliação</option>
+                <option value="Aprovado">Aprovado</option>
+                <option value="Aprovado com Restrições">Aprovado com Restrições</option>
+                <option value="Reprovado">Reprovado</option>
+                <option value="Inativo">Inativo</option>
+              </select>
+            </div>
+          </div>
+        </section>
+        
+        <section v-if="activeTab === 'materiais'" class="section-group">
+          <h2>Materiais/Serviços Fornecidos</h2>
+          <p class="instrucao">Selecione todos os materiais ou serviços que este fornecedor pode fornecer. Isso definirá os requisitos de documentação específicos.</p>
+          
+          <div class="form-group-filter">
+            <label for="filtroBuscaMat">Buscar Material</label>
+            <input 
+              type="search" 
+              id="filtroBuscaMat" 
+              v-model="filtroBusca" 
+              placeholder="Filtrar por nome ou código..."
+            >
+          </div>
 
-        <p v-if="materiais.length === 0" class="empty-state">Nenhum material cadastrado. Cadastre em "Gerenciar Materiais" primeiro.</p>
+          <p v-if="materiais.length === 0" class="empty-state">Nenhum material cadastrado. Cadastre em "Gerenciar Materiais" primeiro.</p>
 
-        <div v-else class="material-grouped-list">
-          <div 
-            v-for="grupo in materiaisAgrupados" 
-            :key="grupo.categoriaId" 
-            class="material-group"
-          >
-            <h3 class="classificacao-header">
-              {{ grupo.categoriaNome }}
-              <span class="count">({{ grupo.materiais.length }})</span>
-            </h3>
-
-            <div class="material-checkboxes">
-              <p v-if="grupo.materiais.length === 0" class="material-item-empty">
-                Nenhum material encontrado.
-              </p>
-              
-              <div v-for="material in grupo.materiais" :key="material.id" class="checkbox-item">
-                <input type="checkbox" :id="material.id" :value="material.id" v-model="materiaisSelecionados">
-                <label :for="material.id">{{ material.nome }} ({{ material.classificacao }})</label>
+          <div v-else class="material-grouped-list">
+            <div 
+              v-for="grupo in materiaisAgrupados" 
+              :key="grupo.categoriaId" 
+              class="material-group"
+            >
+              <h3 class="classificacao-header">
+                {{ grupo.categoriaNome }}
+                <span class="count">({{ grupo.materiais.length }})</span>
+              </h3>
+              <div class="material-checkboxes">
+                <p v-if="grupo.materiais.length === 0" class="material-item-empty">
+                  Nenhum material encontrado.
+                </p>
+                <div v-for="material in grupo.materiais" :key="material.id" class="checkbox-item">
+                  <input type="checkbox" :id="material.id" :value="material.id" v-model="materiaisSelecionados">
+                  <label :for="material.id">{{ material.nome }} ({{ material.classificacao }})</label>
+                </div>
               </div>
             </div>
-
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <div class="form-actions">
         <button type="submit" :disabled="loadingSave" class="btn-submit">
@@ -116,6 +133,9 @@ const route = useRoute()
 const router = useRouter()
 const fornecedorId = route.params.id
 
+// --- NOVO ESTADO DE UI ---
+const activeTab = ref('dados') // Começa na aba 'dados'
+
 // --- ESTADOS GERAIS ---
 const form = ref({
   id: null,
@@ -130,8 +150,6 @@ const grupos = ref([])
 const materiais = ref([]) 
 const materiaisSelecionados = ref([]) 
 const filtroBusca = ref('')
-
-// NOVO ESTADO: Categorias
 const categorias = ref([])
 const loadingCategorias = ref(true)
 
@@ -145,11 +163,10 @@ const isEditing = computed(() => !!fornecedorId)
 
 // --- COMPUTED PROPS ---
 
-// COMPUTED ATUALIZADA: Agrupa pela nova Categoria
+// Lógica de Agrupamento por Categoria (Fase 4)
 const materiaisAgrupados = computed(() => {
   const termo = filtroBusca.value.toLowerCase().trim()
   
-  // 1. Filtra a lista
   const materiaisFiltrados = materiais.value.filter(material => {
     if (!termo) return true 
     const nomeMatch = material.nome.toLowerCase().includes(termo)
@@ -157,7 +174,6 @@ const materiaisAgrupados = computed(() => {
     return nomeMatch || codigoMatch
   })
 
-  // 2. Cria um Map de categorias para agrupar (ID -> Nome)
   const categoriaMap = new Map()
   categorias.value.forEach(cat => {
     categoriaMap.set(cat.id, { categoriaId: cat.id, categoriaNome: cat.nome, materiais: [] })
@@ -165,31 +181,28 @@ const materiaisAgrupados = computed(() => {
   const semCategoriaId = 'sem-categoria'
   categoriaMap.set(semCategoriaId, { categoriaId: semCategoriaId, categoriaNome: 'Sem Categoria', materiais: [] })
 
-  // 3. Agrupa os materiais filtrados
   materiaisFiltrados.forEach(material => {
-    const idCategoria = material.categoria_id
+    const idCategoria = material.categoria_id 
     if (categoriaMap.has(idCategoria)) {
       categoriaMap.get(idCategoria).materiais.push(material)
     } else {
-      categoriaMap.get(semCategoriaId).materiais.push(material) // Se a categoria for nula ou não encontrada
+      categoriaMap.get(semCategoriaId).materiais.push(material) 
     }
   })
 
-  // 4. Formata para o v-for do template
   return Array.from(categoriaMap.values())
               .filter(g => g.materiais.length > 0 || !termo) 
 })
 
 
-// --- FUNÇÕES DE CARREGAMENTO ---
+// --- FUNÇÕES DE CARREGAMENTO (Lógica da Fase 4) ---
 
-// ATUALIZADO: Busca 'categoria_id'
 async function fetchMateriais() {
     loadingMateriais.value = true
     try {
         const { data, error } = await supabase
             .from('materias_primas')
-            .select('id, nome, classificacao, codigo_interno, categoria_id') // <-- ATUALIZADO
+            .select('id, nome, classificacao, codigo_interno, categoria_id') 
             .order('nome', { ascending: true })
         
         if (error) throw error
@@ -203,7 +216,6 @@ async function fetchMateriais() {
     }
 }
 
-// NOVA FUNÇÃO: Busca as categorias
 async function fetchCategorias() {
   loadingCategorias.value = true
   try {
@@ -239,7 +251,6 @@ async function fetchFormData() {
     fetchError.value = null
 
     try {
-        // Busca Grupos
         const { data: gruposData, error: gruposError } = await supabase
             .from('grupos_fornecedor')
             .select('id, nome_grupo')
@@ -247,7 +258,6 @@ async function fetchFormData() {
         if (gruposError) throw gruposError
         grupos.value = gruposData
 
-        // Busca dados de Edição
         if (isEditing.value) {
             const { data: fornecedorData, error: fornError } = await supabase
                 .from('fornecedores')
@@ -366,14 +376,12 @@ async function syncMateriais(id) {
 
 // --- CICLO DE VIDA (ATUALIZADO) ---
 onMounted(async () => {
-    // Carrega dados em paralelo para otimização
     await Promise.all([
       fetchFormData(),
       fetchMateriais(),
-      fetchCategorias() // <-- ADICIONADO
+      fetchCategorias() 
     ])
     
-    // Busca materiais selecionados apenas se estiver editando
     if (isEditing.value) {
         await fetchMateriaisFornecidos()
     } 
@@ -421,7 +429,12 @@ onMounted(async () => {
 .card { background-color: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
 .loading-state, .empty-state, .error-message { text-align: center; padding: 1rem 0; color: #888; }
 .error-message { color: #dc3545; font-weight: bold; }
-.section-group { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px dashed #ddd; }
+.section-group { 
+  /* Removemos a borda de baixo para que as abas controlem o layout */
+  margin-bottom: 0; 
+  padding-bottom: 0; 
+  border-bottom: none; 
+}
 .section-group h2 { color: #007bff; margin-top: 0; margin-bottom: 15px; }
 .instrucao { font-style: italic; color: #666; margin-bottom: 15px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
@@ -429,7 +442,40 @@ onMounted(async () => {
 .form-group label { font-weight: 600; margin-bottom: 5px; color: #333; }
 .form-group input, .form-group select { padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
 
-/* --- ESTILOS ATUALIZADOS PARA FILTRO E GRUPOS DE CATEGORIA --- */
+
+/* --- NOVA ARQUITETURA DE ABAS (TABS) --- */
+.config-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #eee;
+}
+.tab-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  background-color: transparent;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+.tab-button:hover {
+  background-color: #f8f9fa;
+  color: #000;
+}
+.tab-button.active {
+  color: #007bff;
+  border-bottom-color: #007bff;
+}
+.tab-content {
+  padding-top: 1rem; /* Espaço entre a aba e o conteúdo */
+}
+/* --- FIM DA ARQUITETURA DE ABAS --- */
+
+
+/* --- ESTILOS PARA FILTRO E GRUPOS DE CATEGORIA --- */
 .form-group-filter {
   margin-bottom: 1rem;
 }
@@ -454,7 +500,6 @@ onMounted(async () => {
 .material-group {
   margin-bottom: 1.5rem;
 }
-/* O nome do header agora é 'categoria-header' para clareza */
 .classificacao-header {
   color: #007bff;
   margin: 0 0 0.5rem 0;
@@ -494,7 +539,14 @@ onMounted(async () => {
 .checkbox-item label { font-weight: normal; cursor: pointer; word-break: break-word; }
 
 /* Botões de Ação (sem mudança) */
-.form-actions { margin-top: 20px; display: flex; justify-content: flex-end; gap: 15px; }
+.form-actions { 
+  margin-top: 20px; 
+  padding-top: 20px;
+  border-top: 1px dashed #ddd; /* Separador visual */
+  display: flex; 
+  justify-content: flex-end; 
+  gap: 15px; 
+}
 .btn-submit { background-color: #c50d42; color: white; padding: 12px 25px; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
 .btn-submit:hover:not(:disabled) { background-color: #a30b37; }
 .btn-submit:disabled { background-color: #ccc; cursor: not-allowed; }
