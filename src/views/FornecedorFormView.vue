@@ -23,12 +23,10 @@
             <label for="nome">Nome/Razão Social</label>
             <input type="text" id="nome" v-model="form.nome" required>
           </div>
-          
           <div class="form-group">
             <label for="cnpj">CNPJ/ID Fiscal</label>
             <input type="text" id="cnpj" v-model="form.cnpj_id_fiscal" required>
           </div>
-          
           <div class="form-group">
             <label for="contato">Contato Principal</label>
             <input type="text" id="contato" v-model="form.contato">
@@ -44,7 +42,6 @@
             <label for="escopo">Escopo de Fornecimento</label>
             <input type="text" id="escopo" v-model="form.escopo_fornecimento">
           </div>
-          
           <div class="form-group">
             <label for="status_homologacao">Status de Homologação</label>
             <select id="status_homologacao" v-model="form.status_homologacao" required>
@@ -55,7 +52,6 @@
               <option value="Inativo">Inativo</option>
             </select>
           </div>
-          
         </div>
       </section>
       
@@ -63,13 +59,41 @@
         <h2>Materiais/Serviços Fornecidos</h2>
         <p class="instrucao">Selecione todos os materiais ou serviços que este fornecedor pode fornecer. Isso definirá os requisitos de documentação específicos.</p>
         
+        <div class="form-group-filter">
+          <label for="filtroBuscaMat">Buscar Material</label>
+          <input 
+            type="search" 
+            id="filtroBuscaMat" 
+            v-model="filtroBusca" 
+            placeholder="Filtrar por nome ou código..."
+          >
+        </div>
+
         <p v-if="materiais.length === 0" class="empty-state">Nenhum material cadastrado. Cadastre em "Gerenciar Materiais" primeiro.</p>
 
-        <div v-else class="material-checkboxes">
-            <div v-for="material in materiais" :key="material.id" class="checkbox-item">
+        <div v-else class="material-grouped-list">
+          <div 
+            v-for="grupo in materiaisAgrupados" 
+            :key="grupo.classificacao" 
+            class="material-group"
+          >
+            <h3 class="classificacao-header">
+              {{ grupo.classificacao }}
+              <span class="count">({{ grupo.materiais.length }})</span>
+            </h3>
+
+            <div class="material-checkboxes">
+              <p v-if="grupo.materiais.length === 0" class="material-item-empty">
+                Nenhum material encontrado.
+              </p>
+              
+              <div v-for="material in grupo.materiais" :key="material.id" class="checkbox-item">
                 <input type="checkbox" :id="material.id" :value="material.id" v-model="materiaisSelecionados">
                 <label :for="material.id">{{ material.nome }} ({{ material.classificacao }})</label>
+              </div>
             </div>
+
+          </div>
         </div>
       </section>
 
@@ -84,7 +108,6 @@
 </template>
 
 <script setup>
-// O SCRIPT SETUP INTEIRO PERMANECE IDÊNTICO AO ANTERIOR
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/supabase'
@@ -93,6 +116,7 @@ const route = useRoute()
 const router = useRouter()
 const fornecedorId = route.params.id
 
+// --- ESTADOS GERAIS ---
 const form = ref({
   id: null,
   nome: '',
@@ -100,11 +124,14 @@ const form = ref({
   contato: '',
   escopo_fornecimento: '',
   grupo_fornecedor_id: '',
-  status_homologacao: 'Em Avaliação', 
+  status_homologacao: 'Em Avaliação',
 })
 const grupos = ref([]) 
 const materiais = ref([]) 
 const materiaisSelecionados = ref([]) 
+
+// NOVO ESTADO: Filtro de Busca
+const filtroBusca = ref('')
 
 const loadingForm = ref(true)
 const loadingMateriais = ref(true)
@@ -114,12 +141,56 @@ const saveError = ref(null)
 
 const isEditing = computed(() => !!fornecedorId)
 
+// --- COMPUTED PROPS ---
+
+// NOVA COMPUTED: Filtra e Agrupa a lista de materiais
+const materiaisAgrupados = computed(() => {
+  const termo = filtroBusca.value.toLowerCase().trim()
+  
+  // 1. Filtra a lista primeiro
+  const materiaisFiltrados = materiais.value.filter(material => {
+    if (!termo) return true // Se o filtro estiver vazio, mostra todos
+    
+    const nomeMatch = material.nome.toLowerCase().includes(termo)
+    const codigoMatch = material.codigo_interno ? material.codigo_interno.toLowerCase().includes(termo) : false
+    
+    return nomeMatch || codigoMatch
+  })
+
+  // 2. Agrupa os materiais filtrados
+  const grupos = {
+    'Produtivo': [],
+    'Improdutivo': [],
+    'Serviço': [],
+    'Outros': [] // Grupo de fallback
+  }
+
+  materiaisFiltrados.forEach(material => {
+    if (grupos[material.classificacao]) {
+      grupos[material.classificacao].push(material)
+    } else {
+      grupos['Outros'].push(material) // Se a classificação for nula ou inesperada
+    }
+  })
+
+  // 3. Formata para o v-for do template
+  return [
+    { classificacao: 'Produtivo', materiais: grupos['Produtivo'] },
+    { classificacao: 'Improdutivo', materiais: grupos['Improdutivo'] },
+    { classificacao: 'Serviço', materiais: grupos['Serviço'] },
+    { classificacao: 'Outros', materiais: grupos['Outros'] }
+  ].filter(g => g.materiais.length > 0 || !termo) // Só mostra o grupo se ele tiver itens OU se o filtro estiver vazio
+})
+
+
+// --- FUNÇÕES DE CARREGAMENTO (Sem mudanças) ---
+
 async function fetchMateriais() {
     loadingMateriais.value = true
     try {
         const { data, error } = await supabase
             .from('materias_primas')
-            .select('id, nome, classificacao')
+            .select('id, nome, classificacao, codigo_interno') // Adicionado codigo_interno para o filtro
             .order('nome', { ascending: true })
         
         if (error) throw error
@@ -190,6 +261,8 @@ async function fetchFormData() {
         loadingForm.value = false
     }
 }
+
+// --- FUNÇÕES DE SALVAMENTO (Sem mudanças) ---
 
 async function handleSave() {
     loadingSave.value = true
@@ -276,6 +349,7 @@ async function syncMateriais(id) {
     }
 }
 
+// --- CICLO DE VIDA (Sem mudanças) ---
 onMounted(async () => {
     await fetchFormData() 
     await fetchMateriais()
@@ -291,10 +365,10 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* ESTILOS DE LAYOUT ATUALIZADOS */
+/* ESTILOS ATUALIZADOS */
 .fornecedor-form-view { max-width: 1200px; margin: 2rem auto; font-family: Arial, sans-serif; }
 
-/* NOVO Estilo de Cabeçalho de Sub-Página */
+/* Cabeçalho de Sub-Página (sem mudança) */
 .sub-page-header {
   display: flex;
   flex-direction: column;
@@ -311,30 +385,18 @@ onMounted(async () => {
   border-radius: 4px;
   cursor: pointer;
   font-weight: 600;
-  display: inline-flex; /* Para o ícone ficar ao lado */
+  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   text-decoration: none;
-  align-self: flex-start; /* Não estica o botão */
+  align-self: flex-start;
 }
-.btn-voltar .icon {
-  font-weight: bold;
-}
-.header-title-container {
-  margin-top: 0.5rem;
-}
-.header-title-container h1 {
-  margin: 0;
-  color: #c50d42; /* Cor primária para o título */
-}
-.header-title-container p {
-  margin: 0.25rem 0 0;
-  font-size: 1rem;
-  color: #555;
-}
-/* Fim dos novos estilos de cabeçalho */
+.btn-voltar .icon { font-weight: bold; }
+.header-title-container { margin-top: 0.5rem; }
+.header-title-container h1 { margin: 0; color: #c50d42; }
+.header-title-container p { margin: 0.25rem 0 0; font-size: 1rem; color: #555; }
 
-/* Estilos de Card e Formulário (sem mudança) */
+/* Card e Formulário Básico (sem mudança) */
 .card { background-color: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
 .loading-state, .empty-state, .error-message { text-align: center; padding: 1rem 0; color: #888; }
 .error-message { color: #dc3545; font-weight: bold; }
@@ -345,11 +407,71 @@ onMounted(async () => {
 .form-group { display: flex; flex-direction: column; }
 .form-group label { font-weight: 600; margin-bottom: 5px; color: #333; }
 .form-group input, .form-group select { padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
-.material-checkboxes { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
-.checkbox-item { display: flex; align-items: center; background-color: #f7f7f7; padding: 10px; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; }
+
+/* --- NOVOS ESTILOS PARA FILTRO E GRUPOS --- */
+.form-group-filter {
+  margin-bottom: 1rem;
+}
+.form-group-filter label {
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #333;
+  display: block;
+}
+.form-group-filter input {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.material-grouped-list {
+  /* Contêiner para todos os grupos */
+}
+
+.material-group {
+  margin-bottom: 1.5rem;
+}
+.classificacao-header {
+  color: #007bff;
+  margin: 0 0 0.5rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #007bff;
+}
+.classificacao-header .count {
+  font-weight: 400;
+  color: #555;
+  font-size: 0.9em;
+}
+.material-item-empty {
+  font-style: italic;
+  color: #888;
+  padding: 10px 0;
+}
+/* --- FIM DOS NOVOS ESTILOS --- */
+
+
+/* Estilos de Checkbox (sem mudança) */
+.material-checkboxes { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Aumentei o minmax */
+  gap: 15px; 
+}
+.checkbox-item { 
+  display: flex; 
+  align-items: center; 
+  background-color: #f7f7f7; 
+  padding: 10px; 
+  border-radius: 4px; 
+  cursor: pointer; 
+  transition: background-color 0.2s; 
+}
 .checkbox-item:hover { background-color: #eee; }
 .checkbox-item input[type="checkbox"] { margin-right: 10px; transform: scale(1.2); }
-.checkbox-item label { font-weight: normal; cursor: pointer; }
+.checkbox-item label { font-weight: normal; cursor: pointer; word-break: break-word; }
+
+/* Botões de Ação (sem mudança) */
 .form-actions { margin-top: 20px; display: flex; justify-content: flex-end; gap: 15px; }
 .btn-submit { background-color: #c50d42; color: white; padding: 12px 25px; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
 .btn-submit:hover:not(:disabled) { background-color: #a30b37; }
