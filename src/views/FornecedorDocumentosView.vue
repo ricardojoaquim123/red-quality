@@ -15,7 +15,7 @@
     
     <div v-if="loading" class="loading">Carregando checklist...</div>
     
-        <div v-else-if="fornecedor && !fornecedor.grupo_fornecedor_id" class="empty-list">
+    <div v-else-if="fornecedor && !fornecedor.grupo_fornecedor_id" class="empty-list">
       <p>Este fornecedor não está associado a nenhum "Grupo".</p>
       <p>
         Por favor, <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> 
@@ -23,7 +23,7 @@
       </p>
     </div>
     
-        <div v-else-if="requisitos.length === 0" class="empty-list">
+    <div v-else-if="requisitos.length === 0" class="empty-list">
       <p>O grupo (ou o fornecedor) não possui nenhum documento requerido.</p>
       <p>
         Vá até <RouterLink to="/configuracoes">Configurações</RouterLink> 
@@ -115,11 +115,11 @@
           </div>
           
           <div class="input-group-split">
-                            <div class="input-group">
+            <div class="input-group">
               <label for="data_emissao">Data de Emissão</label>
               <input type="date" id="data_emissao" v-model="dataEmissao">
             </div>
-                            <div class="input-group" v-if="selectedRequisito.requer_data_validade">
+            <div class="input-group" v-if="selectedRequisito.requer_data_validade">
               <label for="data_validade">Data de Validade</label>
               <input 
                 type="date" 
