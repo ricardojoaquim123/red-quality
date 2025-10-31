@@ -237,7 +237,7 @@ onMounted(() => {
     </div>
     
         <div v-else-if="requisitos.length === 0" class="empty-list">
-      <p>O grupo (ou o fornecedor) não possui nenhum documento requerido.</p>
+      <p>O grupo (ou o fornecedor) não possui nenhum documento requerido.</p>
       <p>
         Vá até <RouterLink to="/configuracoes">Configurações</RouterLink> 
         para definir os requisitos, ou <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> para atribuir um grupo.
@@ -273,7 +273,7 @@ onMounted(() => {
             </button>
             
             <button 
-              v-if="item.docEnviado" 
+              v-if="item.docEnviado"s
               @click="visualizarFile(item.docEnviado.arquivo_url)" 
               class="button-action button-visualizar"
             >
@@ -281,12 +281,12 @@ onMounted(() => {
             </button>
 
             <button 
-              v-if="item.docEnviado"out
+              v-if="item.docEnviado" 
               @click="downloadFile(item.docEnviado.arquivo_url)" 
               class="button-action button-download"
             >
               Baixar
-button>
+            </button>
           </span>
         </li>
       </ul>
@@ -304,7 +304,7 @@ button>
               type="file" 
               id="file" 
               @change="onFileSelected"
-a             :required="!selectedRequisito.docEnviado"
+              :required="!selectedRequisito.docEnviado"
             >
             <div v-if="selectedRequisito.docEnviado && !fileToUpload" class="file-info">
               Arquivo atual: 
@@ -321,7 +321,7 @@ s               {{ selectedRequisito.docEnviado.nome_arquivo }}
           <div class="input-group-split">
                         <div class="input-group">
               <label for="data_emissao">Data de Emissão</label>
-key           <input type="date" id="data_emissao" v-model="dataEmissao">
+              <input type="date" id="data_emissao" v-model="dataEmissao">
             </div>
                         <div class="input-group" v-if="selectedRequisito.requer_data_validade">
               <label for="data_validade">Data de Validade</label>
@@ -337,22 +337,22 @@ s               :required="selectedRequisito.requer_data_validade"
           <p v-if="uploadError" class="error-message">{{ uploadError }}</p>
 
 s         <div class="action-buttons">
-s           <button type="submit" class="button-salvar" :disabled="uploading">
+            <button type="submit" class="button-salvar" :disabled="uploading">
               {{ uploading ? 'Enviando...' : 'Salvar' }}
             </button>
             <button type="button" class="button-cancelar" @click="closeUploadModal">
-              Cancelar
+s             Cancelar
             </button>
           </div>
         </form>
       </div>
     </div>
-   s
+    
   </div>
 </template>
 
 <style scoped>
-/* (O CSS deste arquivo está correto) */
+/* (Estilos da página, do modal e da checklist) */
 h2 { margin-top: 0; }
 h3 { margin-top: 0; }
 .page-header {
@@ -392,7 +392,9 @@ source_file:
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1.5fr;
   gap: 1rem;
-s   align-items: center;
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
+  align-items: center;
   padding: 1rem 1.5rem;
   border-bottom: 1px solid #f0f0f0;
 }
@@ -405,8 +407,6 @@ s   align-items: center;
 }
 .item-checklist strong { color: #333; }
 .item-checklist small {
-source_file:
-- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   display: block;
   font-size: 0.8rem;
   color: #777;
@@ -415,7 +415,7 @@ source_file:
 /* Status com Cores */
 .status-aprovado { color: #28a745; }
 .status-rejeitado { color: #dc3545; }
-.status-vencido { color: #dc3F3545; font-weight: 700; }
+.status-vencido { color: #dc3545; font-weight: 700; }
 .status-em { color: #fd7e14; } /* Em Análise */
 .status-pendente { color: #6c757d; }
 
@@ -425,11 +425,11 @@ source_file:
   border: none;
   border-radius: 4px;
   text-decoration: none;
-source_file:
-- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   color: white;
   cursor: pointer;
   font-size: 0.9rem;
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   white-space: nowrap;
 }
 .button-upload { background-color: #007bff; }
@@ -456,8 +456,6 @@ source_file:
   padding: 2rem;
   border-radius: 8px;
   box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-source_file:
-- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   width: 100%;
   max-width: 600px;
 }
@@ -467,7 +465,7 @@ source_file:
 .input-group input, .input-group select {
 source_file:
 - /opt/build/repo/src/views/FornecedorDocumentosView.vue
-is   width: 100%;
+  width: 100%;
   padding: 0.75rem 1rem;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -496,7 +494,9 @@ is   width: 100%;
   color: white;
   border: none;
   border-radius: 50%;
-s   width: 20px;
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
+  width: 20px;
   height: 20px;
   cursor: pointer;
   margin-left: 10px;
@@ -504,10 +504,8 @@ s   width: 20px;
 .action-buttons { display: flex; gap: 1rem; margin-top: 1.5rem; }
 .button-salvar {
   padding: 0.75rem 1.5rem;
-  border: none;
+ar   border: none;
   border-radius: 4px;
-source_file:
-- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   background-color: #28a745;
   color: white;
   font-size: 1rem;
@@ -515,7 +513,7 @@ source_file:
 }
 .button-salvar:disabled { background-color: #ccc; }
 .button-cancelar {
-  padding: 0.75rem 1.5rem;
+s   padding: 0.75rem 1.5rem;
   border: 1px solid #ccc;
   border-radius: 4px;
   background-color: #fff;
@@ -525,7 +523,7 @@ source_file:
 }
 .error-message {
   color: #dc3545;
-  font-weight: 600;
+Indo   font-weight: 600;
   margin-bottom: 0;
 }
 
@@ -537,9 +535,7 @@ source_file:
     padding-bottom: 1.5rem;
   }
   .item-checklist.header-list { display: none; }
-source_file:
-- /opt/build/repo/src/views/FornecedorDocumentosView.vue
-s   .item-checklist span:nth-of-type(2)::before { content: 'Status: '; font-weight: 600; }
+  .item-checklist span:nth-of-type(2)::before { content: 'Status: '; font-weight: 600; }
   .item-checklist span:nth-of-type(3)::before { content: 'Validade: '; font-weight: 600; }
   .actions { justify-content: flex-start; }
   .modal-content {
