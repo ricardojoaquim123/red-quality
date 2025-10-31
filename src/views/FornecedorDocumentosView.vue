@@ -1,3 +1,18 @@
+<div class="input-group" class.input-group>  ```
+
+Ou a correção não foi feita corretamente nas duas ocorrências.
+
+Abaixo, forneço o **código COMPLETO** e corrigido do arquivo **`FornecedorDocumentosView.vue`**.
+
+---
+
+## 🛠️ Passo 2: Correção de Sintaxe em `FornecedorDocumentosView.vue`
+
+O erro foi corrigido nas linhas 258 e 261, trocando o seletor inválido `class.input-group` pela sintaxe correta do atributo `class="input-group"`.
+
+### Código Completo: `FornecedorDocumentosView.vue`
+
+```html
 <template>
   <div>
     <div class="page-header">
@@ -72,7 +87,7 @@
             >
               Baixar
             </button>
-            
+
             <button
               v-if="item.docEnviado"
               @click="deleteFile(item.docEnviado)"
@@ -82,6 +97,7 @@
             </button>
           </span>
         </li>
+        
       </ul>
     </section>
     
@@ -112,11 +128,11 @@
           </div>
           
           <div class="input-group-split">
-            <div class="input-group">
+                            <div class="input-group">
               <label for="data_emissao">Data de Emissão</label>
               <input type="date" id="data_emissao" v-model="dataEmissao">
             </div>
-            <div class="input-group" v-if="selectedRequisito.requer_data_validade">
+                            <div class="input-group" v-if="selectedRequisito.requer_data_validade">
               <label for="data_validade">Data de Validade</label>
               <input 
                 type="date" 
