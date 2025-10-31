@@ -42,27 +42,58 @@
       </section>
 
       <section class="card list-section">
-        <h2>Materiais Cadastrados ({{ materiais.length }})</h2>
+        
+        <div class="list-header">
+          <h2>Materiais Cadastrados ({{ materiais.length }})</h2>
+          <div class="form-group-filter">
+            <label for="filtroBusca">Buscar</label>
+            <input 
+              type="search" 
+              id="filtroBusca" 
+              v-model="filtroBusca" 
+              placeholder="Filtrar por nome ou código..."
+            >
+          </div>
+        </div>
+
         <p v-if="loadingList" class="loading-state">Carregando lista...</p>
         <p v-else-if="listError" class="error-message">{{ listError }}</p>
         
-        <ul v-else class="material-list">
-          <li v-for="material in materiais" :key="material.id" class="material-item">
-            <div class="material-info">
-              <strong>{{ material.nome }}</strong> ({{ material.classificacao }})
-              <small v-if="material.codigo_interno">Cód: {{ material.codigo_interno }}</small>
-            </div>
-            <div class="material-actions">
-                <button @click="handleEdit(material)" class="btn-action btn-edit">Editar</button>
-                <button @click="openRequisitosModal(material)" class="btn-action btn-requisitos">
-                    Requisitos ({{ getReqCount(material.id) }})
-                </button>
-                <button @click="handleDeleteMaterial(material)" class="btn-action btn-delete">
-                    Excluir
-                </button>
-            </div>
-          </li>
-        </ul>
+        <div v-else>
+          <div 
+            v-for="grupo in materiaisAgrupados" 
+            :key="grupo.classificacao" 
+            class="material-group"
+          >
+            <h3 class="classificacao-header">
+              {{ grupo.classificacao }}
+              <span class="count">({{ grupo.materiais.length }})</span>
+            </h3>
+            
+            <ul class="material-list">
+              <li v-if="grupo.materiais.length === 0" class="material-item-empty">
+                Nenhum material encontrado para esta classificação.
+              </li>
+              
+              <li v-for="material in grupo.materiais" :key="material.id" class="material-item">
+                <div class="material-info">
+                  <strong>{{ material.nome }}</strong> ({{ material.classificacao }})
+                  <small v-if="material.codigo_interno">Cód: {{ material.codigo_interno }}</small>
+                </div>
+                <div class="material-actions">
+                    <button @click="handleEdit(material)" class="btn-action btn-edit">Editar</button>
+                    <button @click="openRequisitosModal(material)" class="btn-action btn-requisitos">
+                        Requisitos ({{ getReqCount(material.id) }})
+                    </button>
+                    <button @click="handleDeleteMaterial(material)" class="btn-action btn-delete">
+                        Excluir
+                    </button>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+
       </section>
     </div>
     
@@ -116,6 +147,9 @@ const loadingMaterial = ref(false)
 const listError = ref(null)
 const materialError = ref(null)
 
+// NOVO ESTADO: Filtro de Busca
+const filtroBusca = ref('')
+
 // --- ESTADO FORMULÁRIO DE MATERIAL ---
 const materialForm = ref({ id: null, nome: '', codigo_interno: '', classificacao: '' })
 const isEditing = computed(() => !!materialForm.value.id)
@@ -129,7 +163,7 @@ const loadingRequisitos = ref(true)
 const loadingTipos = ref(true)
 const requisitosError = ref(null)
 
-// --- COMPUTED PROPS DE REQUISITOS ---
+// --- COMPUTED PROPS ---
 const requisitosMap = ref({})
 const getReqCount = (materialId) => requisitosMap.value[materialId] || 0
 
@@ -142,8 +176,47 @@ const getDocumentoNome = (tipoId) => {
     return tipo ? tipo.nome_documento : 'Documento Desconhecido'
 }
 
+// NOVA COMPUTED: Filtra e Agrupa a lista de materiais
+const materiaisAgrupados = computed(() => {
+  const termo = filtroBusca.value.toLowerCase().trim()
+  
+  // 1. Filtra a lista primeiro
+  const materiaisFiltrados = materiais.value.filter(material => {
+    if (!termo) return true // Se o filtro estiver vazio, mostra todos
+    
+    const nomeMatch = material.nome.toLowerCase().includes(termo)
+    const codigoMatch = material.codigo_interno ? material.codigo_interno.toLowerCase().includes(termo) : false
+    
+    return nomeMatch || codigoMatch
+  })
 
-// --- FUNÇÕES DE CARREGAMENTO ---
+  // 2. Agrupa os materiais filtrados
+  const grupos = {
+    'Produtivo': [],
+    'Improdutivo': [],
+    'Serviço': [],
+    'Outros': [] // Grupo de fallback
+  }
+
+  materiaisFiltrados.forEach(material => {
+    if (grupos[material.classificacao]) {
+      grupos[material.classificacao].push(material)
+    } else {
+      grupos['Outros'].push(material) // Se a classificação for nula ou inesperada
+    }
+  })
+
+  // 3. Formata para o v-for do template
+  return [
+    { classificacao: 'Produtivo', materiais: grupos['Produtivo'] },
+    { classificacao: 'Improdutivo', materiais: grupos['Improdutivo'] },
+    { classificacao: 'Serviço', materiais: grupos['Serviço'] },
+    { classificacao: 'Outros', materiais: grupos['Outros'] }
+  ].filter(g => g.materiais.length > 0 || !termo) // Só mostra o grupo se ele tiver itens OU se o filtro estiver vazio
+})
+
+
+// --- FUNÇÕES DE CARREGAMENTO (Sem mudanças) ---
 
 async function fetchMateriais() {
   loadingList.value = true
@@ -201,7 +274,7 @@ async function fetchRequisitosECount() {
 }
 
 
-// --- FUNÇÕES DE CRUD DO MATERIAL ---
+// --- FUNÇÕES DE CRUD DO MATERIAL (Sem mudanças) ---
 
 function resetForm() {
     materialForm.value = { id: null, nome: '', codigo_interno: '', classificacao: '' }
@@ -254,9 +327,6 @@ async function handleMaterialSubmit() {
     }
 }
 
-/**
- * NOVA FUNÇÃO: Excluir um material e todas as suas dependências.
- */
 async function handleDeleteMaterial(material) {
   if (!confirm(`TEM CERTEZA que deseja excluir o material "${material.nome}"?\n\nEsta ação é irreversível e removerá TODOS os requisitos e associações deste material com fornecedores.`)) {
     return;
@@ -266,21 +336,18 @@ async function handleDeleteMaterial(material) {
   materialError.value = null;
 
   try {
-    // Etapa 1: Excluir dependências em 'requisitos_material'
     const { error: reqError } = await supabase
       .from('requisitos_material')
       .delete()
       .eq('materia_prima_id', material.id);
     if (reqError) throw new Error(`Falha ao excluir requisitos: ${reqError.message}`);
 
-    // Etapa 2: Excluir dependências em 'fornecedor_materiais'
     const { error: fornError } = await supabase
       .from('fornecedor_materiais')
       .delete()
       .eq('materia_prima_id', material.id);
     if (fornError) throw new Error(`Falha ao excluir associações: ${fornError.message}`);
 
-    // Etapa 3: Excluir o material principal
     const { error: matError } = await supabase
       .from('materias_primas')
       .delete()
@@ -289,11 +356,9 @@ async function handleDeleteMaterial(material) {
 
     alert(`Material "${material.nome}" excluído com sucesso.`);
     
-    // Etapa 4: Atualizar a UI
-    await fetchMateriais(); // Recarrega a lista
-    await fetchRequisitosECount(); // Recarrega a contagem de requisitos
+    await fetchMateriais(); 
+    await fetchRequisitosECount(); 
     
-    // Se o material excluído era o que estava em edição, limpa o formulário
     if (isEditing.value && materialForm.value.id === material.id) {
       resetForm();
     }
@@ -307,7 +372,7 @@ async function handleDeleteMaterial(material) {
 }
 
 
-// --- FUNÇÕES DE GESTÃO DE REQUISITOS (Modal) ---
+// --- FUNÇÕES DE GESTÃO DE REQUISITOS (Modal) (Sem mudanças) ---
 
 async function fetchRequisitosAtuais() {
     if (!materialSelecionado.value) return
@@ -414,11 +479,12 @@ onMounted(() => {
   color: #555;
   margin: 0;
 }
-/* FIM CABEÇALHO PADRÃO */
 
 .admin-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
 @media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } .list-section { order: -1; } }
 .card { background-color: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+
+/* Seção de Cadastro (sem mudança) */
 .form-group { display: flex; flex-direction: column; margin-bottom: 15px; }
 .form-group label { font-weight: 600; margin-bottom: 5px; color: #333; }
 .form-group input, .form-group select { padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
@@ -427,14 +493,84 @@ onMounted(() => {
 .btn-submit:hover:not(:disabled) { background-color: #a30b37; }
 .btn-cancel { background-color: #6c757d; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }
 .error-message { color: #dc3545; margin-top: 10px; font-weight: bold; }
-.material-list { list-style: none; padding: 0; }
-.material-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dotted #eee; }
-.material-info small { display: block; color: #666; }
-.material-actions { display: flex; gap: 8px; flex-wrap: wrap; /* Permite que os botões quebrem a linha em telas menores */ }
+
+/* --- NOVOS ESTILOS PARA LISTA AGRUPADA --- */
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+}
+.list-header h2 {
+  margin: 0;
+}
+.form-group-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex-grow: 1;
+  max-width: 300px;
+}
+.form-group-filter label {
+  font-weight: 600;
+  font-size: 0.9em;
+}
+.form-group-filter input {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+.material-group {
+  margin-bottom: 1.5rem;
+}
+.classificacao-header {
+  color: #007bff;
+  margin: 0 0 0.5rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #007bff;
+}
+.classificacao-header .count {
+  font-weight: 400;
+  color: #555;
+  font-size: 0.9em;
+}
+.material-list { 
+  list-style: none; 
+  padding: 0; 
+}
+.material-item { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  padding: 10px 0; 
+  border-bottom: 1px dotted #eee; 
+}
+.material-item-empty {
+  font-style: italic;
+  color: #888;
+  padding: 10px 0;
+}
+.material-info small { 
+  display: block; 
+  color: #666; 
+}
+.material-actions { 
+  display: flex; 
+  gap: 8px; 
+  flex-wrap: wrap;
+}
 .btn-action { padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em; border: 1px solid transparent; }
 .btn-edit { background-color: #ffc107; color: #333; }
 .btn-requisitos { background-color: #007bff; color: white; }
 .btn-delete { background-color: #dc3545; color: white; }
+/* --- FIM DOS NOVOS ESTILOS --- */
+
+
+/* Modal (sem mudança) */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
 .modal-content { background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 650px; max-height: 90vh; overflow-y: auto; }
 .material-highlight { color: #007bff; }
