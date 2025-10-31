@@ -1,5 +1,6 @@
 <template>
   <div class="admin-materiais-view">
+    
     <header class="page-header">
       <h1>⚙️ Administração de Materiais e Requisitos Específicos</h1>
       <p>Gerencie a lista mestra de Matérias-Primas/Serviços e os documentos exigidos para cada item.</p>
@@ -56,6 +57,9 @@
                 <button @click="openRequisitosModal(material)" class="btn-action btn-requisitos">
                     Requisitos ({{ getReqCount(material.id) }})
                 </button>
+                <button @click="handleDeleteMaterial(material)" class="btn-action btn-delete">
+                    Excluir
+                </button>
             </div>
           </li>
         </ul>
@@ -73,7 +77,6 @@
                 <div class="form-group-inline add-req">
                     <select v-model="tipoDocumentoSelecionado" class="select-req" required>
                         <option value="" disabled>Selecione o Tipo de Documento</option>
-                        
                         <option v-for="tipo in tiposDocumentoDisponiveis" :key="tipo.id" :value="tipo.id">
                             {{ tipo.nome_documento }}
                         </option>
@@ -136,7 +139,6 @@ const tiposDocumentoDisponiveis = computed(() => {
 })
 const getDocumentoNome = (tipoId) => {
     const tipo = tiposDocumento.value.find(t => t.id === tipoId)
-    // CORREÇÃO 3: Removido 'tipo.descricao' do fallback
     return tipo ? tipo.nome_documento : 'Documento Desconhecido'
 }
 
@@ -165,7 +167,6 @@ async function fetchMateriais() {
 async function fetchTiposDocumento() {
     loadingTipos.value = true
     try {
-        // CORREÇÃO 2: Removida a coluna 'descricao' da consulta
         const { data, error } = await supabase
             .from('tipos_documento')
             .select('id, nome_documento') 
@@ -175,7 +176,6 @@ async function fetchTiposDocumento() {
     } catch (error) {
         console.error('Erro ao carregar tipos de documento:', error)
         listError.value = `Falha ao carregar Tipos de Documento: ${error.message}`
-        // Se 'nome_documento' também não existir, o erro aparecerá aqui
     } finally {
         loadingTipos.value = false
     }
@@ -252,6 +252,58 @@ async function handleMaterialSubmit() {
     } finally {
         loadingMaterial.value = false
     }
+}
+
+/**
+ * NOVA FUNÇÃO: Excluir um material e todas as suas dependências.
+ */
+async function handleDeleteMaterial(material) {
+  if (!confirm(`TEM CERTEZA que deseja excluir o material "${material.nome}"?\n\nEsta ação é irreversível e removerá TODOS os requisitos e associações deste material com fornecedores.`)) {
+    return;
+  }
+
+  loadingMaterial.value = true;
+  materialError.value = null;
+
+  try {
+    // Etapa 1: Excluir dependências em 'requisitos_material'
+    const { error: reqError } = await supabase
+      .from('requisitos_material')
+      .delete()
+      .eq('materia_prima_id', material.id);
+    if (reqError) throw new Error(`Falha ao excluir requisitos: ${reqError.message}`);
+
+    // Etapa 2: Excluir dependências em 'fornecedor_materiais'
+    const { error: fornError } = await supabase
+      .from('fornecedor_materiais')
+      .delete()
+      .eq('materia_prima_id', material.id);
+    if (fornError) throw new Error(`Falha ao excluir associações: ${fornError.message}`);
+
+    // Etapa 3: Excluir o material principal
+    const { error: matError } = await supabase
+      .from('materias_primas')
+      .delete()
+      .eq('id', material.id);
+    if (matError) throw new Error(`Falha ao excluir material: ${matError.message}`);
+
+    alert(`Material "${material.nome}" excluído com sucesso.`);
+    
+    // Etapa 4: Atualizar a UI
+    await fetchMateriais(); // Recarrega a lista
+    await fetchRequisitosECount(); // Recarrega a contagem de requisitos
+    
+    // Se o material excluído era o que estava em edição, limpa o formulário
+    if (isEditing.value && materialForm.value.id === material.id) {
+      resetForm();
+    }
+
+  } catch (error) {
+    console.error('Erro ao excluir material:', error);
+    materialError.value = `Erro ao excluir: ${error.message}`;
+  } finally {
+    loadingMaterial.value = false;
+  }
 }
 
 
@@ -344,9 +396,26 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Estilos (Mesmos da última vez) */
+/* ESTILOS ATUALIZADOS */
 .admin-materiais-view { max-width: 1400px; margin: 2rem auto; font-family: Arial, sans-serif; }
-.page-header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #c50d42; }
+
+/* CABEÇALHO PADRÃO DE PÁGINA PRINCIPAL */
+.page-header { 
+  margin-bottom: 2rem; 
+  padding-bottom: 1rem; 
+  border-bottom: 1px solid #c50d42; 
+}
+.page-header h1 {
+  font-size: 2rem;
+  margin: 0 0 0.25rem 0;
+}
+.page-header p {
+  font-size: 1.1rem;
+  color: #555;
+  margin: 0;
+}
+/* FIM CABEÇALHO PADRÃO */
+
 .admin-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
 @media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } .list-section { order: -1; } }
 .card { background-color: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
@@ -361,7 +430,7 @@ onMounted(() => {
 .material-list { list-style: none; padding: 0; }
 .material-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dotted #eee; }
 .material-info small { display: block; color: #666; }
-.material-actions { display: flex; gap: 8px; }
+.material-actions { display: flex; gap: 8px; flex-wrap: wrap; /* Permite que os botões quebrem a linha em telas menores */ }
 .btn-action { padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em; border: 1px solid transparent; }
 .btn-edit { background-color: #ffc107; color: #333; }
 .btn-requisitos { background-color: #007bff; color: white; }
