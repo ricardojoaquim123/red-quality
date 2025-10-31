@@ -103,9 +103,9 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { supabase } from '@/supabase'
-import { useAuthStore } from '@/stores/authStore' 
+// import { useAuthStore } from '@/stores/authStore' // Removido - Não estava em uso
 
-const authStore = useAuthStore()
+// const authStore = useAuthStore() // Removido - Não estava em uso
 
 // --- ESTADO GERAL ---
 const materiais = ref([])
@@ -169,7 +169,7 @@ async function fetchMateriais() {
 async function fetchTiposDocumento() {
     loadingTipos.value = true
     try {
-        // CORREÇÃO: Buscamos apenas os campos mais prováveis para evitar sobrecarga e RLS
+        // ESTA É A CONSULTA CORRIGIDA (que já estava no seu código)
         const { data, error } = await supabase
             .from('tipos_documento')
             .select('id, nome, descricao, nome_documento') 
