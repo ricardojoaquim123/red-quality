@@ -29,7 +29,7 @@
             <label for="grupo">Grupo de Fornecedor</label>
             <select id="grupo" v-model="form.grupo_fornecedor_id" required>
               <option value="" disabled>Selecione o Grupo</option>
-              <option v-for="grupo in grupos" :key="grupo.id" :value="grupo.id">{{ grupo.descricao }}</option>
+              <option v-for="grupo in grupos" :key="grupo.id" :value="grupo.id">{{ grupo.nome_grupo }}</option>
             </select>
           </div>
           <div class="form-group">
@@ -146,10 +146,10 @@ async function fetchFormData() {
 
     try {
         // 1. Carregar Grupos
-        // MUDANÇA CRÍTICA: Busca 'descricao' no lugar de 'nome'
+        // CORREÇÃO 2: Buscando a coluna correta ('nome_grupo')
         const { data: gruposData, error: gruposError } = await supabase
             .from('grupos_fornecedor')
-            .select('id, descricao') // <--- AQUI ESTÁ A CORREÇÃO DE SCHEMA
+            .select('id, nome_grupo') // <-- CORRIGIDO de 'descricao' para 'nome_grupo'
             
         if (gruposError) throw gruposError
         grupos.value = gruposData
