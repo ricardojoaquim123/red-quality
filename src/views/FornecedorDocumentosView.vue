@@ -73,7 +73,6 @@
               class="button-action button-download"
             >
               Baixar
------------------
             </button>
           </span>
         </li>
@@ -97,7 +96,7 @@
             <div v-if="selectedRequisito.docEnviado && !fileToUpload" class="file-info">
               Arquivo atual: 
               <a href="#" @click.prevent="visualizarFile(selectedRequisito.docEnviado.arquivo_url)">
-s               {{ selectedRequisito.docEnviado.nome_arquivo }}
+                {{ selectedRequisito.docEnviado.nome_arquivo }}
               </a>
               <button 
                 @click.prevent="deleteFile(selectedRequisito.docEnviado)" 
@@ -107,24 +106,24 @@ s               {{ selectedRequisito.docEnviado.nome_arquivo }}
           </div>
           
           <div class="input-group-split">
-                        <div class="input-group">
+                        <div class="input-group"> 
               <label for="data_emissao">Data de Emissão</label>
               <input type="date" id="data_emissao" v-model="dataEmissao">
             </div>
-                        <div class="input-group" v-if="selectedRequisito.requer_data_validade">
+                        <div class="input-group" v-if="selectedRequisito.requer_data_validade"> 
               <label for="data_validade">Data de Validade</label>
               <input 
-                type="date" 
+                type="date"
                 id="data_validade" 
                 v-model="dataValidade"
-s               :required="selectedRequisito.requer_data_validade"
+                :required="selectedRequisito.requer_data_validade"
               >
             </div>
           </div>
           
           <p v-if="uploadError" class="error-message">{{ uploadError }}</p>
 
-s         <div class="action-buttons">
+          <div class="action-buttons">
             <button type="submit" class="button-salvar" :disabled="uploading">
               {{ uploading ? 'Enviando...' : 'Salvar' }}
             </button>
@@ -190,7 +189,7 @@ async function fetchData() {
       .from('documentos_fornecedor')
       .select('*')
       .eq('fornecedor_id', fornecedorId)
-A   if (enviadosError) throw enviadosError
+    if (enviadosError) throw enviadosError
     documentosEnviados.value = enviadosData
 
   } catch (err) {
@@ -242,7 +241,7 @@ function closeUploadModal() {
 }
 async function handleUpload() {
   if (!fileToUpload.value && !selectedRequisito.value.docEnviado) {
-s   return uploadError.value = 'Por favor, selecione um arquivo.'
+    return uploadError.value = 'Por favor, selecione um arquivo.'
   }
   uploading.value = true
   uploadError.value = null
@@ -271,7 +270,7 @@ s   return uploadError.value = 'Por favor, selecione um arquivo.'
     }
     const { error: dbError } = await supabase
       .from('documentos_fornecedor')
-s     .upsert(docMetadata, { 
+      .upsert(docMetadata, { 
         onConflict: 'fornecedor_id, tipo_documento_id'
       })
     if (dbError) throw dbError
@@ -309,7 +308,7 @@ async function visualizarFile(filePath) {
 
 // Função de Download (força o download)
 async function downloadFile(filePath) {
-s   try {
+  try {
     const { data, error } = await supabase.storage
       .from('documentos-fornecedores')
       .createSignedUrl(filePath, 60, {
@@ -375,6 +374,8 @@ h3 { margin-top: 0; }
   padding: 0;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   overflow: hidden;
 }
 .loading, .empty-list {
@@ -433,6 +434,8 @@ h3 { margin-top: 0; }
 
 /* --- Estilos do Modal --- */
 .modal-overlay {
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   position: fixed;
   top: 0;
   left: 0;
@@ -484,8 +487,8 @@ h3 { margin-top: 0; }
   background-color: #dc3545;
   color: white;
   border: none;
-  border-radius: 50%;
-s   width: 20px;
+s   border-radius: 50%;
+  width: 20px;
   height: 20px;
   cursor: pointer;
   margin-left: 10px;
@@ -496,7 +499,9 @@ s   width: 20px;
   border: none;
   border-radius: 4px;
   background-color: #28a745;
-a   color: white;
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
+  color: white;
   font-size: 1rem;
   cursor: pointer;
 }
@@ -507,7 +512,7 @@ a   color: white;
   border-radius: 4px;
   background-color: #fff;
   color: #555;
-s   font-size: 1rem;
+  font-size: 1rem;
   cursor: pointer;
 }
 .error-message {
@@ -524,6 +529,8 @@ s   font-size: 1rem;
     padding-bottom: 1.5rem;
   }
   .item-checklist.header-list { display: none; }
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   .item-checklist span:nth-of-type(2)::before { content: 'Status: '; font-weight: 600; }
   .item-checklist span:nth-of-type(3)::before { content: 'Validade: '; font-weight: 600; }
   .actions { justify-content: flex-start; }
