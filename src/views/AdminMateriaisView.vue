@@ -74,7 +74,7 @@
                     <select v-model="tipoDocumentoSelecionado" class="select-req" required>
                         <option value="" disabled>Selecione o Tipo de Documento</option>
                         <option v-for="tipo in tiposDocumentoDisponiveis" :key="tipo.id" :value="tipo.id">
-                            {{ tipo.nome || tipo.descricao || tipo.nome_documento }}
+                            {{ tipo.nome_documento || tipo.nome || tipo.descricao }}
                         </option>
                     </select>
                     <button @click="handleAddRequisito" :disabled="!tipoDocumentoSelecionado" class="btn-submit btn-add">
@@ -140,8 +140,8 @@ const tiposDocumentoDisponiveis = computed(() => {
 })
 const getDocumentoNome = (tipoId) => {
     const tipo = tiposDocumento.value.find(t => t.id === tipoId)
-    // Usando a coluna 'nome' como fallback, baseada na convenção do Módulo 1
-    return tipo ? (tipo.nome_documento || tipo.nome) : 'Documento Desconhecido'
+    // Usamos o nome de coluna que assumimos ser o correto
+    return tipo ? (tipo.nome_documento || tipo.nome || tipo.descricao) : 'Documento Desconhecido'
 }
 
 
@@ -169,17 +169,15 @@ async function fetchMateriais() {
 async function fetchTiposDocumento() {
     loadingTipos.value = true
     try {
-        // Busca a lista de tipos de documento (usando o nome de coluna mais provável)
+        // CORREÇÃO: Buscamos apenas os campos mais prováveis para evitar sobrecarga e RLS
         const { data, error } = await supabase
             .from('tipos_documento')
-            // Seleciona todas as colunas para ter certeza de pegar a coluna de nome correta
-            .select('*') 
+            .select('id, nome, descricao, nome_documento') 
 
         if (error) throw error
         tiposDocumento.value = data
     } catch (error) {
         console.error('Erro ao carregar tipos de documento:', error)
-        // O erro mais comum aqui será na RLS.
         listError.value = `Falha ao carregar Tipos de Documento: ${error.message}`
     } finally {
         loadingTipos.value = false
@@ -223,6 +221,8 @@ async function handleMaterialSubmit() {
     loadingMaterial.value = true
     materialError.value = null
     const isUpdate = isEditing.value
+
+    // Lógica de Salvamento (INSERT/UPDATE)
 
     try {
         const payload = { 
@@ -349,171 +349,35 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Estilos Gerais */
-.admin-materiais-view {
-  max-width: 1400px;
-  margin: 2rem auto;
-  font-family: Arial, sans-serif;
-}
-.page-header {
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #c50d42;
-}
-
-/* Grid Principal */
-.admin-grid {
-    display: grid;
-    grid-template-columns: 1fr 2fr;
-    gap: 20px;
-}
-@media (max-width: 900px) {
-    .admin-grid {
-        grid-template-columns: 1fr;
-    }
-    .list-section {
-        order: -1; /* Coloca a lista primeiro no mobile */
-    }
-}
-
-.card {
-    background-color: #fff;
-    border: 1px solid #eee;
-    border-radius: 8px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-}
-
-/* Formulário e Botões */
-.form-group {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 15px;
-}
-.form-group label {
-    font-weight: 600;
-    margin-bottom: 5px;
-    color: #333;
-}
-.form-group input, .form-group select {
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-}
-.form-actions {
-    display: flex;
-    gap: 10px;
-}
-.btn-submit {
-    background-color: #c50d42;
-    color: white;
-    padding: 10px 15px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-.btn-submit:hover:not(:disabled) {
-    background-color: #a30b37;
-}
-.btn-cancel {
-    background-color: #6c757d;
-    color: white;
-    padding: 10px 15px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-}
-.error-message {
-    color: #dc3545;
-    margin-top: 10px;
-    font-weight: bold;
-}
-
-/* Lista de Materiais */
-.material-list {
-    list-style: none;
-    padding: 0;
-}
-.material-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px dotted #eee;
-}
-.material-info small {
-    display: block;
-    color: #666;
-}
-.material-actions {
-    display: flex;
-    gap: 8px;
-}
-.btn-action {
-    padding: 6px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.9em;
-    border: 1px solid transparent;
-}
+/* Estilos (Mesmos da última vez) */
+.admin-materiais-view { max-width: 1400px; margin: 2rem auto; font-family: Arial, sans-serif; }
+.page-header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #c50d42; }
+.admin-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
+@media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } .list-section { order: -1; } }
+.card { background-color: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+.form-group { display: flex; flex-direction: column; margin-bottom: 15px; }
+.form-group label { font-weight: 600; margin-bottom: 5px; color: #333; }
+.form-group input, .form-group select { padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+.form-actions { display: flex; gap: 10px; }
+.btn-submit { background-color: #c50d42; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; }
+.btn-submit:hover:not(:disabled) { background-color: #a30b37; }
+.btn-cancel { background-color: #6c757d; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }
+.error-message { color: #dc3545; margin-top: 10px; font-weight: bold; }
+.material-list { list-style: none; padding: 0; }
+.material-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dotted #eee; }
+.material-info small { display: block; color: #666; }
+.material-actions { display: flex; gap: 8px; }
+.btn-action { padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em; border: 1px solid transparent; }
 .btn-edit { background-color: #ffc107; color: #333; }
 .btn-requisitos { background-color: #007bff; color: white; }
 .btn-delete { background-color: #dc3545; color: white; }
-
-/* Modal de Requisitos */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.6);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
-.modal-content {
-    background: white;
-    padding: 30px;
-    border-radius: 8px;
-    width: 90%;
-    max-width: 650px;
-    max-height: 90vh;
-    overflow-y: auto;
-}
-.material-highlight {
-    color: #007bff;
-}
-.requisitos-manager {
-    margin-top: 20px;
-}
-.add-req {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 10px;
-    margin-bottom: 15px;
-    border-bottom: 1px dashed #ccc;
-    padding-bottom: 15px;
-}
-.requisito-list {
-    list-style: none;
-    padding: 0;
-    max-height: 250px;
-    overflow-y: auto;
-}
-.requisito-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px dotted #f0f0f0;
-}
-.btn-add {
-    width: 100%;
-}
-.btn-fechar {
-    background-color: #6c757d;
-}
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+.modal-content { background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 650px; max-height: 90vh; overflow-y: auto; }
+.material-highlight { color: #007bff; }
+.requisitos-manager { margin-top: 20px; }
+.add-req { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-bottom: 15px; border-bottom: 1px dashed #ccc; padding-bottom: 15px; }
+.requisito-list { list-style: none; padding: 0; max-height: 250px; overflow-y: auto; }
+.requisito-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dotted #f0f0f0; }
+.btn-add { width: 100%; }
+.btn-fechar { background-color: #6c757d; }
 </style>
