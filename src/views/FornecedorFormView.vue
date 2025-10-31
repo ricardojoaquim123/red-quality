@@ -17,10 +17,7 @@
             <label for="nome">Nome/Razão Social</label>
             <input type="text" id="nome" v-model="form.nome" required>
           </div>
-          <div class="form-group">
-            <label for="cnpj">CNPJ/ID Fiscal</label>
-            <input type="text" id="cnpj" v-model="form.cnpj">
-          </div>
+          
           <div class="form-group">
             <label for="contato">Contato Principal</label>
             <input type="text" id="contato" v-model="form.contato">
@@ -64,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/supabase'
 
@@ -76,7 +73,7 @@ const fornecedorId = route.params.id
 const form = ref({
   id: null,
   nome: '',
-  cnpj: '',
+  // cnpj: '', // <-- CORREÇÃO 1: Removido do estado inicial
   contato: '',
   escopo_fornecimento: '',
   grupo_fornecedor_id: '',
@@ -157,7 +154,7 @@ async function fetchFormData() {
             form.value = { 
                 id: fornecedorData.id,
                 nome: fornecedorData.nome,
-                cnpj: fornecedorData.cnpj,
+                // cnpj: fornecedorData.cnpj, // <-- CORREÇÃO 2: Removido do preenchimento
                 contato: fornecedorData.contato,
                 escopo_fornecimento: fornecedorData.escopo_fornecimento,
                 grupo_fornecedor_id: fornecedorData.grupo_fornecedor_id
@@ -174,19 +171,14 @@ async function fetchFormData() {
 
 // --- FUNÇÕES DE SALVAMENTO ---
 
-/**
- * Salva o registro na tabela fornecedores e gerencia a tabela pivô.
- */
 async function handleSave() {
     loadingSave.value = true
     saveError.value = null
 
-    // --- CORREÇÃO DE ARQUITETURA ---
-    // 1. Criar um "payload" limpo, contendo APENAS as colunas do DB.
-    // Isso evita enviar 'id: null' ou outras propriedades reativas.
+    // CORREÇÃO 3: Criar um "payload" limpo SEM a coluna 'cnpj'
     const payload = {
         nome: form.value.nome,
-        cnpj: form.value.cnpj,
+        // cnpj: form.value.cnpj, // <-- CORREÇÃO 3: Removido do payload
         contato: form.value.contato,
         escopo_fornecimento: form.value.escopo_fornecimento,
         grupo_fornecedor_id: form.value.grupo_fornecedor_id,
@@ -195,29 +187,28 @@ async function handleSave() {
     try {
         let fornecedorRecemCriadoId = fornecedorId
         
-        // 2. Salvar o Fornecedor (INSERT/UPDATE)
+        // Salvar o Fornecedor (INSERT/UPDATE)
         if (isEditing.value) {
-            // UPDATE (usando o payload limpo)
+            // UPDATE
             const { error } = await supabase
                 .from('fornecedores')
-                .update(payload) // <-- Usa o payload limpo
+                .update(payload) 
                 .eq('id', fornecedorId)
                 
             if (error) throw error
         } else {
-            // INSERT (usando o payload limpo)
+            // INSERT
             const { data, error } = await supabase
                 .from('fornecedores')
-                .insert(payload) // <-- Usa o payload limpo
+                .insert(payload) 
                 .select('id')
                 .single()
             
             if (error) throw error
             fornecedorRecemCriadoId = data.id
         }
-        // -----------------------------
 
-        // 3. Gerenciar a Tabela Pivô (fornecedor_materiais)
+        // Gerenciar a Tabela Pivô (fornecedor_materiais)
         await syncMateriais(fornecedorRecemCriadoId)
 
         alert(`Fornecedor ${form.value.nome} salvo com sucesso!`)
@@ -231,9 +222,6 @@ async function handleSave() {
     }
 }
 
-/**
- * Sincroniza a lista de materiais fornecidos pelo fornecedor.
- */
 async function syncMateriais(id) {
     // 1. Obter a lista atual de materiais no banco
     const { data: materiaisAtuais, error: fetchError } = await supabase
@@ -269,24 +257,20 @@ async function syncMateriais(id) {
             materia_prima_id: material_id
         }))
         const { error: insertError } = await supabase
-            .from('fornecedor_materiais')
+            .from('forneciamentos')
             .insert(registrosParaInserir)
         if (insertError) throw insertError
     }
 }
 
-
 // --- CICLO DE VIDA ---
 onMounted(async () => {
-    // Ordem das chamadas
     await fetchFormData() 
     await fetchMateriais()
-    // Apenas busca materiais já selecionados se estiver editando
     if (isEditing.value) {
         await fetchMateriaisFornecidos()
     } 
 
-    // Se houver erro de carregamento (ex: RLS), ele será exibido
     if (fetchError.value) {
         loadingForm.value = false
         loadingMateriais.value = false
