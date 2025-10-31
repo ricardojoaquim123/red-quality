@@ -1,143 +1,3 @@
-<template>
-  <div>
-    <div class="page-header">
-      <div>
-        <RouterLink to="/fornecedores" class="link-voltar">&larr; Voltar para Fornecedores</RouterLink>
-        
-        <div v-if="fornecedor">
-          <h2>{{ fornecedor.nome }}</h2>
-          <h3>
-            Checklist de Documentos (Grupo: <strong>{{ fornecedor.grupos_fornecedor?.nome_grupo || 'Nenhum' }}</strong>)
-          </h3>
-        </div>
-      </div>
-    </div>
-    
-    <div v-if="loading" class="loading">Carregando checklist...</div>
-    
-        <div v-else-if="fornecedor && !fornecedor.grupo_fornecedor_id" class="empty-list">
-      <p>Este fornecedor não está associado a nenhum "Grupo".</p>
-      <p>
-        Por favor, <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> 
-        e selecione um "Grupo de Fornecedor" para ver a checklist.
-      </p>
-    </div>
-    
-        <div v-else-if="requisitos.length === 0" class="empty-list">
-      <p>O grupo (ou o fornecedor) não possui nenhum documento requerido.</p>
-      <p>
-        Vá até <RouterLink to="/configuracoes">Configurações</RouterLink> 
-        para definir os requisitos, ou <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> para atribuir um grupo.
-      </p>
-    </div>
-
-    <section v-else class="list-section">
-      <ul class="item-list">
-        <li class="item-checklist header-list">
-          <span>Documento Requerido</span>
-          <span>Status</span>
-          <span>Validade</span>
-          <span class="actions">Ações</span>
-        </li>
-        <li v-for="item in checklist" :key="item.id" class="item-checklist">
-          <span>
-            <strong>{{ item.nome_documento }}</strong>
-            <small v-if="item.docEnviado">{{ item.docEnviado.nome_arquivo }}</small>
-          </span>
-          <span>
-            <strong :class="`status-${item.status.toLowerCase().split(' ')[0]}`">
-              {{ item.status }}
-            </strong>
-          </span>
-          <span>{{ item.docEnviado?.data_validade || '--' }}</span>
-          <span class="actions">
-            
-            <button 
-              @click="openUploadModal(item)" 
-              class="button-action button-upload"
-            >
-              {{ item.docEnviado ? 'Atualizar' : 'Enviar' }}
-            </button>
-            
-            <button 
-              v-if="item.docEnviado" 
-              @click="visualizarFile(item.docEnviado.arquivo_url)" 
-              class="button-action button-visualizar"
-            >
-              Visualizar
-            </button>
-
-            <button 
-              v-if="item.docEnviado" 
-              @click="downloadFile(item.docEnviado.arquivo_url)" 
-              class="button-action button-download"
-            >
-              Baixar
-            </button>
-          </span>
-        </li>
-      </ul>
-    </section>
-    
-    <div v-if="selectedRequisito" class="modal-overlay" @click.self="closeUploadModal">
-      <div class="modal-content">
-        <h3>{{ selectedRequisito.docEnviado ? 'Atualizar' : 'Enviar' }} Documento</h3>
-        <h4>{{ selectedRequisito.nome_documento }}</h4>
-        
-        <form @submit.prevent="handleUpload" class="upload-form">
-          <div class="input-group">
-            <label for="file">Arquivo (PDF, PNG, JPG...)</label>
-            <input 
-              type="file" 
-              id="file" 
-              @change="onFileSelected"
-              :required="!selectedRequisito.docEnviado"
-            >
-            <div v-if="selectedRequisito.docEnviado && !fileToUpload" class="file-info">
-              Arquivo atual: 
-              <a href="#" @click.prevent="visualizarFile(selectedRequisito.docEnviado.arquivo_url)">
-                {{ selectedRequisito.docEnviado.nome_arquivo }}
-              </a>
-              <button 
-                @click.prevent="deleteFile(selectedRequisito.docEnviado)" 
-                class="button-delete-tiny"
-              >X</button>
-            </div>
-          </div>
-          
-          <div class="input-group-split">
-                        <div class="input-group"> 
-              <label for="data_emissao">Data de Emissão</label>
-              <input type="date" id="data_emissao" v-model="dataEmissao">
-            </div>
-                        <div class="input-group" v-if="selectedRequisito.requer_data_validade"> 
-              <label for="data_validade">Data de Validade</label>
-              <input 
-                type="date"
-                id="data_validade" 
-                v-model="dataValidade"
-                :required="selectedRequisito.requer_data_validade"
-              >
-            </div>
-          </div>
-          
-          <p v-if="uploadError" class="error-message">{{ uploadError }}</p>
-
-          <div class="action-buttons">
-            <button type="submit" class="button-salvar" :disabled="uploading">
-              {{ uploading ? 'Enviando...' : 'Salvar' }}
-            </button>
-            <button type="button" class="button-cancelar" @click="closeUploadModal">
-              Cancelar
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-    
-  </div>
-</template>
-
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
@@ -334,7 +194,7 @@ async function deleteFile(docEnviado) {
       .from('documentos_fornecedor')
       .delete()
       .eq('id', docEnviado.id)
-s   if (dbError) throw dbError
+    if (dbError) throw dbError
     alert('Documento excluído com sucesso.')
     await fetchData()
   } catch (err) {
@@ -351,8 +211,148 @@ onMounted(() => {
 })
 </script>
 
+<template>
+  <div>
+    <div class="page-header">
+      <div>
+        <RouterLink to="/fornecedores" class="link-voltar">&larr; Voltar para Fornecedores</RouterLink>
+        
+        <div v-if="fornecedor">
+          <h2>{{ fornecedor.nome }}</h2>
+          <h3>
+            Checklist de Documentos (Grupo: <strong>{{ fornecedor.grupos_fornecedor?.nome_grupo || 'Nenhum' }}</strong>)
+          </h3>
+        </div>
+      </div>
+    </div>
+    
+    <div v-if="loading" class="loading">Carregando checklist...</div>
+    
+        <div v-else-if="fornecedor && !fornecedor.grupo_fornecedor_id" class="empty-list">
+      <p>Este fornecedor não está associado a nenhum "Grupo".</p>
+      <p>
+        Por favor, <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> 
+        e selecione um "Grupo de Fornecedor" para ver a checklist.
+      </p>
+    </div>
+    
+        <div v-else-if="requisitos.length === 0" class="empty-list">
+      <p>O grupo (ou o fornecedor) não possui nenhum documento requerido.</p>
+      <p>
+        Vá até <RouterLink to="/configuracoes">Configurações</RouterLink> 
+        para definir os requisitos, ou <RouterLink :to="`/fornecedores/editar/${fornecedorId}`">edite o fornecedor</RouterLink> para atribuir um grupo.
+      </p>
+    </div>
+
+    <section v-else class="list-section">
+      <ul class="item-list">
+        <li class="item-checklist header-list">
+          <span>Documento Requerido</span>
+          <span>Status</span>
+          <span>Validade</span>
+          <span class="actions">Ações</span>
+        </li>
+        <li v-for="item in checklist" :key="item.id" class="item-checklist">
+          <span>
+            <strong>{{ item.nome_documento }}</strong>
+            <small v-if="item.docEnviado">{{ item.docEnviado.nome_arquivo }}</small>
+          </span>
+          <span>
+            <strong :class="`status-${item.status.toLowerCase().split(' ')[0]}`">
+              {{ item.status }}
+            </strong>
+          </span>
+          <span>{{ item.docEnviado?.data_validade || '--' }}</span>
+          <span class="actions">
+            
+            <button 
+              @click="openUploadModal(item)" 
+              class="button-action button-upload"
+            >
+              {{ item.docEnviado ? 'Atualizar' : 'Enviar' }}
+            </button>
+            
+            <button 
+              v-if="item.docEnviado" 
+              @click="visualizarFile(item.docEnviado.arquivo_url)" 
+              class="button-action button-visualizar"
+            >
+              Visualizar
+            </button>
+
+            <button 
+              v-if="item.docEnviado"out
+              @click="downloadFile(item.docEnviado.arquivo_url)" 
+              class="button-action button-download"
+            >
+              Baixar
+button>
+          </span>
+        </li>
+      </ul>
+    </section>
+    
+    <div v-if="selectedRequisito" class="modal-overlay" @click.self="closeUploadModal">
+      <div class="modal-content">
+        <h3>{{ selectedRequisito.docEnviado ? 'Atualizar' : 'Enviar' }} Documento</h3>
+        <h4>{{ selectedRequisito.nome_documento }}</h4>
+        
+        <form @submit.prevent="handleUpload" class="upload-form">
+          <div class="input-group">
+            <label for="file">Arquivo (PDF, PNG, JPG...)</label>
+            <input 
+              type="file" 
+              id="file" 
+              @change="onFileSelected"
+a             :required="!selectedRequisito.docEnviado"
+            >
+            <div v-if="selectedRequisito.docEnviado && !fileToUpload" class="file-info">
+              Arquivo atual: 
+              <a href="#" @click.prevent="visualizarFile(selectedRequisito.docEnviado.arquivo_url)">
+s               {{ selectedRequisito.docEnviado.nome_arquivo }}
+              </a>
+              <button 
+                @click.prevent="deleteFile(selectedRequisito.docEnviado)" 
+                class="button-delete-tiny"
+              >X</button>
+            </div>
+          </div>
+          
+          <div class="input-group-split">
+                        <div class="input-group">
+              <label for="data_emissao">Data de Emissão</label>
+key           <input type="date" id="data_emissao" v-model="dataEmissao">
+            </div>
+                        <div class="input-group" v-if="selectedRequisito.requer_data_validade">
+              <label for="data_validade">Data de Validade</label>
+              <input 
+                type="date" 
+                id="data_validade" 
+                v-model="dataValidade"
+s               :required="selectedRequisito.requer_data_validade"
+              >
+            </div>
+          </div>
+          
+          <p v-if="uploadError" class="error-message">{{ uploadError }}</p>
+
+s         <div class="action-buttons">
+s           <button type="submit" class="button-salvar" :disabled="uploading">
+              {{ uploading ? 'Enviando...' : 'Salvar' }}
+            </button>
+            <button type="button" class="button-cancelar" @click="closeUploadModal">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+   s
+  </div>
+</template>
+
 <style scoped>
-/* (Estilos da página, do modal e da checklist) */
+/* (O CSS deste arquivo está correto) */
 h2 { margin-top: 0; }
 h3 { margin-top: 0; }
 .page-header {
@@ -392,7 +392,7 @@ source_file:
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1.5fr;
   gap: 1rem;
-  align-items: center;
+s   align-items: center;
   padding: 1rem 1.5rem;
   border-bottom: 1px solid #f0f0f0;
 }
@@ -405,6 +405,8 @@ source_file:
 }
 .item-checklist strong { color: #333; }
 .item-checklist small {
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   display: block;
   font-size: 0.8rem;
   color: #777;
@@ -413,7 +415,7 @@ source_file:
 /* Status com Cores */
 .status-aprovado { color: #28a745; }
 .status-rejeitado { color: #dc3545; }
-.status-vencido { color: #dc3545; font-weight: 700; }
+.status-vencido { color: #dc3F3545; font-weight: 700; }
 .status-em { color: #fd7e14; } /* Em Análise */
 .status-pendente { color: #6c757d; }
 
@@ -423,6 +425,8 @@ source_file:
   border: none;
   border-radius: 4px;
   text-decoration: none;
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   color: white;
   cursor: pointer;
   font-size: 0.9rem;
@@ -434,8 +438,6 @@ source_file:
 
 /* --- Estilos do Modal --- */
 .modal-overlay {
-source_file:
-- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   position: fixed;
   top: 0;
   left: 0;
@@ -443,6 +445,8 @@ source_file:
   height: 100vh;
   background-color: rgba(0,0,0,0.5);
   display: flex;
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   justify-content: center;
   align-items: center;
   z-index: 1000;
@@ -452,6 +456,8 @@ source_file:
   padding: 2rem;
   border-radius: 8px;
   box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
   width: 100%;
   max-width: 600px;
 }
@@ -459,7 +465,9 @@ source_file:
 .input-group { display: flex; flex-direction: column; }
 .input-group label { margin-bottom: 0.5rem; font-weight: 600; color: #444; }
 .input-group input, .input-group select {
-  width: 100%;
+source_file:
+- /opt/build/repo/src/views/FornecedorDocumentosView.vue
+is   width: 100%;
   padding: 0.75rem 1rem;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -487,8 +495,8 @@ source_file:
   background-color: #dc3545;
   color: white;
   border: none;
-s   border-radius: 50%;
-  width: 20px;
+  border-radius: 50%;
+s   width: 20px;
   height: 20px;
   cursor: pointer;
   margin-left: 10px;
@@ -498,9 +506,9 @@ s   border-radius: 50%;
   padding: 0.75rem 1.5rem;
   border: none;
   border-radius: 4px;
-  background-color: #28a745;
 source_file:
 - /opt/build/repo/src/views/FornecedorDocumentosView.vue
+  background-color: #28a745;
   color: white;
   font-size: 1rem;
   cursor: pointer;
@@ -531,7 +539,7 @@ source_file:
   .item-checklist.header-list { display: none; }
 source_file:
 - /opt/build/repo/src/views/FornecedorDocumentosView.vue
-  .item-checklist span:nth-of-type(2)::before { content: 'Status: '; font-weight: 600; }
+s   .item-checklist span:nth-of-type(2)::before { content: 'Status: '; font-weight: 600; }
   .item-checklist span:nth-of-type(3)::before { content: 'Validade: '; font-weight: 600; }
   .actions { justify-content: flex-start; }
   .modal-content {
